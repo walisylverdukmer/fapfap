@@ -53,7 +53,7 @@ function setupAdminForm() {
         };
 
         try {
-            const response = await fetch('http://localhost:5000/api/auth/register-katika', {
+            const response = await fetch(BACKEND_URL + '/api/auth/register-katika', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)

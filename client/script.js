@@ -8,7 +8,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     console.log("Tentative de connexion pour:", phone);
 
     try {
-        const response = await fetch('http://localhost:5000/api/auth/login', {
+        const response = await fetch(BACKEND_URL + '/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone, password })

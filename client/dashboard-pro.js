@@ -27,9 +27,9 @@ document.getElementById('addKatikaFormPro').addEventListener('submit', async (e)
     };
 
     try {
-        const response = await fetch('http://localhost:5000/api/auth/register-katika', {
+        const response = await fetch(BACKEND_URL + '/api/auth/register-katika', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
@@ -58,7 +58,7 @@ async function loadKatikaList() {
     try {
         // Note : Tu devras créer cette route dans moneyRoutes ou authRoutes
         // Pour l'instant, on récupère tous les utilisateurs ayant le rôle 'katika'
-        const response = await fetch('http://localhost:5000/api/money/all-katikas', {
+        const response = await fetch(BACKEND_URL + '/api/money/all-katikas', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -112,9 +112,9 @@ function rechargeKatika(id, name) {
 
 async function transferToKatika(id, amount) {
     try {
-        const response = await fetch('http://localhost:5000/api/money/transfer', {
+        const response = await fetch(BACKEND_URL + '/api/money/transfer', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },

@@ -38,7 +38,7 @@ async function initClub() {
             };
 
             try {
-                const response = await fetch('http://localhost:5000/api/auth/register-player', {
+                const response = await fetch(BACKEND_URL + '/api/auth/register-player', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -77,7 +77,7 @@ async function loadClubPlayers() {
     
     try {
         // AJOUT CRUCIAL DU TOKEN DANS LES HEADERS
-        const response = await fetch(`http://localhost:5000/api/money/club-players/${user.club_id}`, {
+        const response = await fetch(`${BACKEND_URL}/api/money/club-players/${user.club_id}`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -126,9 +126,9 @@ async function manageBalance(playerId, playerName) {
     
     if (amount && !isNaN(amount) && amount > 0) {
         try {
-            const response = await fetch('http://localhost:5000/api/money/transfer', {
+            const response = await fetch(BACKEND_URL + '/api/money/transfer', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },

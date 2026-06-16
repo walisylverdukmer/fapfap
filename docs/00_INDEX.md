@@ -27,6 +27,15 @@
 | S5 | [rapport-durcissement-sprint5.md](rapport-durcissement-sprint5.md) | Rate limiting, CORS, JWT, timer, déconnexions |
 | S5+ | [audit-fonctionnel.md](audit-fonctionnel.md) | Audit complet des 15 règles métier |
 | **FINAL** | **[rapport-final-beta.md](rapport-final-beta.md)** | **Score global · Bêta fermée : OUI** |
+| **RENDER** | **[rapport-render-go-nogo.md](rapport-render-go-nogo.md)** | **Audit déploiement Render : GO ✅** |
+
+## Déploiement
+
+| Fichier | Sujet |
+|--------|-------|
+| [vercel-deployment-guide.md](vercel-deployment-guide.md) | Guide déploiement Railway/Render/Vercel (RC1) |
+| [render-deployment-guide.md](render-deployment-guide.md) | Guide complet déploiement Render + Vercel |
+| [render-env-vars.md](render-env-vars.md) | Variables d'environnement Render — référence complète |
 
 ---
 
