@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mon Portefeuille - Fap Fap</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="card" style="text-align: center;">
+        <h2 id="playerName">Joueur</h2>
+        <div style="font-size: 3rem; color: var(--green);" id="playerBalance">0 FCFA</div>
+        <p>ID Club: <span id="clubId">--</span></p>
+    </div>
+
+    <div class="card">
+        <h3>Demander une Recharge</h3>
+        <input type="number" id="rechargeAmount" placeholder="Montant">
+        <button onclick="requestMoney()">Envoyer au Katika</button>
+    </div>
+</body>
+</html>

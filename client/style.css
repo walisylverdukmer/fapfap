@@ -1,0 +1,250 @@
+:root {
+    --gold: #f1c40f;
+    --gold-dark: #b7950b;
+    --pro-gold: #d4af37; /* Or spécifique Admin */
+    --dark: #1a1a1a;
+    --card-bg: #2d2d2d;
+    --red: #e74c3c;
+    --red-dark: #c0392b;
+    --green: #2ecc71;
+    --table-green: radial-gradient(#27ae60, #145a32);
+    --white: #ffffff;
+    --black: #000000;
+}
+
+/* --- STRUCTURE GÉNÉRALE --- */
+body {
+    background-color: var(--dark);
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    /* On enlève overflow: hidden pour permettre le scroll sur les pages admin si nécessaire */
+    overflow-x: hidden; 
+    display: flex;
+    flex-direction: column; /* Changé pour empiler Navbar + Content */
+    min-height: 100vh;
+}
+
+/* --- NAVBAR PRO (Wali Sylver) --- */
+.navbar-pro {
+    background: #000;
+    padding: 0 20px;
+    height: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--pro-gold);
+    flex-shrink: 0; /* Empêche la navbar de rétrécir */
+}
+
+.nav-links {
+    background: #111;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    padding: 10px 20px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.nav-link {
+    color: #888;
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+    transition: 0.3s;
+    border: 1px solid transparent;
+}
+
+.nav-link:hover {
+    background: #222;
+    color: var(--pro-gold);
+}
+
+.nav-link.active {
+    color: var(--pro-gold);
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid var(--pro-gold);
+}
+
+.btn-logout {
+    background: var(--red-dark) !important;
+    color: white !important;
+    border: none !important;
+    padding: 6px 15px !important;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    height: fit-content;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+/* --- BOUTONS UNIFORMES --- */
+button, .btn-action, .btn-special, .btn-sit, .btn-send {
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+    font-size: 0.82rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    white-space: nowrap;
+}
+
+button:hover, .btn-action:hover, .btn-special:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+    filter: brightness(1.1);
+}
+
+/* --- ZONE DE JEU (Fix pour dashboard.html) --- */
+.main-wrapper {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - 105px); /* Hauteur moins Navbar + NavLinks */
+}
+
+.game-container {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #121212;
+}
+
+.poker-table {
+    width: 860px;
+    height: 400px; /* Ajusté légèrement */
+    background: var(--table-green);
+    border: 12px solid #4e342e;
+    border-radius: 200px;
+    position: relative;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+}
+
+/* --- ACTIONS SPÉCIALES --- */
+#special-actions {
+    position: absolute;
+    bottom: 115px; 
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    z-index: 1000;
+    height: 42px;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-special {
+    height: 40px;
+    min-width: 125px;
+    padding: 0 18px;
+}
+
+.blink-gold {
+    background: var(--gold) !important;
+    color: var(--dark) !important;
+    border: 2px solid var(--dark) !important;
+    animation: blinker 0.8s linear infinite;
+}
+
+@keyframes blinker {
+    50% { opacity: 0.7; transform: scale(1.03); }
+}
+
+/* --- PANNEAUX LATÉRAUX --- */
+.side-column {
+    width: 280px;
+    background: var(--white);
+    color: var(--black);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+}
+
+.column-header {
+    background: #f8f9fa;
+    padding: 15px;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 3px solid var(--gold);
+    font-size: 1rem;
+    color: var(--black);
+}
+
+.scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.chat-msg {
+    margin-bottom: 10px;
+    padding: 8px;
+    background: #f1f3f5;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    border-left: 4px solid var(--gold);
+    color: var(--black);
+}
+
+/* --- MA MAIN --- */
+.player-slot.p-bottom {
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 450px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.hand {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    height: 100px;
+    margin-bottom: 15px;
+}
+
+.card-img {
+    width: 65px;
+    height: 95px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #444;
+    color: black;
+    margin-left: -20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    font-weight: bold;
+    font-size: 1.3rem;
+    cursor: pointer;
+    transition: 0.2s ease-out;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+}
+
+.card-img:hover {
+    transform: translateY(-25px) scale(1.1);
+    border-color: var(--gold);
+    z-index: 100;
+}
+
+/* --- SCROLLBARS --- */
+.scroll-area::-webkit-scrollbar { width: 6px; }
+.scroll-area::-webkit-scrollbar-track { background: #f1f1f1; }
+.scroll-area::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+

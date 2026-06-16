@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fap Fap 2026 - Portail</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--gold);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .admin-box input {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+        }
+        .admin-box button {
+            width: 100%;
+            background: var(--gold);
+            color: black;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header style="padding: 15px; background: rgba(0,0,0,0.5); display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--gold);">
+        <div class="logo" style="color: var(--gold); font-weight: bold; font-size: 1.5rem;">♠️ FAP FAP</div>
+        <div id="welcomeMsg" style="color: white; font-weight: bold;"></div>
+        <button onclick="logout()" style="background: #c62828; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">Déconnexion</button>
+    </header>
+
+    <div class="container" style="max-width: 900px; margin: auto; padding: 20px;">
+        
+        <section class="portal-section">
+            <h2 style="color: var(--gold);">🎮 SALLES DISPONIBLES</h2>
+            <div id="clubsGrid" class="grid-container">
+                </div>
+        </section>
+
+        <hr style="border: 0.5px solid #333; margin: 40px 0;">
+
+        <section class="portal-section">
+            <h2 style="color: #00d4ff;">💼 GESTION DES CLUBS</h2>
+            <div id="katikaSection">
+                </div>
+            <div id="becomeKatikaLink" style="margin-top: 15px; font-size: 0.9rem; text-align: center;">
+                <a href="#" style="color: var(--gold); text-decoration: none;" onclick="alert('Demande envoyée au SuperAdmin !')">Devenir Katika ? Gérez vos propres tables</a>
+            </div>
+        </section>
+
+        <div id="adminPanel" style="display: none;">
+            <div class="admin-box">
+                <h3 style="color: var(--gold); margin-top: 0;">🎖️ RECRUTER UN NOUVEAU KATIKA</h3>
+                <p style="font-size: 0.8rem; color: #aaa; margin-bottom: 15px;">Wali, créez un compte gestionnaire et son club associé ici.</p>
+                
+                <form id="addKatikaForm">
+                    <input type="text" id="k_name" placeholder="Nom complet du Katika" required>
+                    <input type="text" id="k_phone" placeholder="N° de téléphone (Identifiant)" required>
+                    <input type="password" id="k_pass" placeholder="Mot de passe provisoire" required>
+                    <input type="text" id="k_club" placeholder="Nom du Club (ex: Prestige Club)" required>
+                    <button type="submit">CRÉER LE COMPTE & LE CLUB</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

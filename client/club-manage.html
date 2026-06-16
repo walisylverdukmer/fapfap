@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestion du Club - Fap Fap 2026</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        :root { --pro-gold: #d4af37; }
+        
+        .manage-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 25px;
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        .player-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-left: 4px solid var(--gold);
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 4px;
+        }
+
+        .player-info strong { color: var(--gold); font-size: 1.1rem; }
+        .player-info span { color: #888; font-size: 0.85rem; display: block; }
+
+        .balance-badge {
+            background: rgba(241, 196, 15, 0.1);
+            color: var(--gold);
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            border: 1px solid var(--gold);
+        }
+
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #aaa; font-size: 0.8rem; text-transform: uppercase; }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="navbar-pro">
+        <div class="logo">♠️ FAP <span style="color:var(--pro-gold)">CLUB</span></div>
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <span id="userDisplay" style="color: #aaa; font-size: 0.9rem;">Chargement...</span>
+            <button onclick="logout()" class="btn-logout">DECONNEXION</button>
+        </div>
+    </header>
+
+    <nav class="nav-links">
+        <a href="dashboard-pro.html" id="link-admin" class="nav-link" style="display:none;">📊 TABLEAU DE BORD</a>
+        <a href="dashboard.html" class="nav-link">🎮 SALLES DE JEU</a>
+        <a href="club-manage.html" class="nav-link active">📂 GESTION JOUEURS</a>
+    </nav>
+
+    <div class="manage-grid">
+        <section class="card" style="background: #161616; padding: 20px; border-radius: 8px;">
+            <h3 style="color: var(--gold); margin-top:0;">🆕 NOUVEAU JOUEUR</h3>
+            <p style="font-size: 0.8rem; color: #666; margin-bottom: 20px;">Inscrire un joueur dans votre club.</p>
+            
+            <form id="addPlayerForm">
+                <div class="form-group">
+                    <label>Nom / Pseudo</label>
+                    <input type="text" id="p_username" placeholder="Ex: Jean_D" required>
+                </div>
+                <div class="form-group">
+                    <label>N° de Téléphone</label>
+                    <input type="text" id="p_phone" placeholder="Ex: 0102030405" required>
+                </div>
+                <div class="form-group">
+                    <label>Code / Mot de passe</label>
+                    <input type="password" id="p_password" placeholder="Min 4 caractères" required>
+                </div>
+                <div class="form-group">
+                    <label>Mise initiale (FCFA)</label>
+                    <input type="number" id="p_wallet" value="2000" step="500" required>
+                </div>
+                <button type="submit" class="btn-special blink-gold" style="width: 100%; height: 45px;">VALIDER L'INSCRIPTION</button>
+            </form>
+        </section>
+
+        <section class="card" style="background: #161616; padding: 20px; border-radius: 8px;">
+            <h3 style="color: var(--gold); margin-top:0;">👥 JOUEURS DE MON CLUB</h3>
+            <div id="playerListContainer" style="margin-top: 20px;">
+                <div style="text-align: center; color: #444; padding: 40px;">Chargement de la liste...</div>
+            </div>
+        </section>
+    </div>
+
+    <script src="club-manage.js"></script>
+</body>
+</html>

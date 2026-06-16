@@ -1,0 +1,24 @@
+# Dépendances
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# Variables d'environnement (NE JAMAIS COMMITER)
+server/.env
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / macOS
+.DS_Store
+Thumbs.db
+._*
+__MACOSX/
+
+# Éditeurs
+.vscode/
+*.swp

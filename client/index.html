@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fap Fap 2026 - Le Cercle</title>
+    <style>
+        :root {
+            --felt-green: #0a5c2f;
+            --gold: #d4af37;
+            --wood: #3e2723;
+            --white: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(circle, var(--felt-green) 0%, #052c17 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--white);
+        }
+
+        .login-container {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 40px;
+            border-radius: 15px;
+            border: 4px solid var(--wood);
+            box-shadow: 0 0 20px rgba(0,0,0,0.7), inset 0 0 50px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 5px;
+            color: var(--gold);
+            text-shadow: 2px 2px 4px #000;
+            letter-spacing: 2px;
+        }
+
+        .tagline {
+            font-style: italic;
+            color: var(--gold);
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .mode-btn {
+            background: linear-gradient(to bottom, #555, #222);
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            padding: 12px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .mode-btn.active {
+            background: var(--gold);
+            color: var(--wood);
+            box-shadow: 0 0 10px var(--gold);
+        }
+
+        .mode-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .full-width { grid-column: span 2; }
+
+        form { display: flex; flex-direction: column; gap: 15px; }
+
+        input {
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid var(--gold);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 1.1em;
+            outline: none;
+        }
+
+        input::placeholder { color: rgba(255,255,255,0.5); }
+
+        button[type="submit"] {
+            background: linear-gradient(to bottom, #c62828, #8e0000);
+            color: white;
+            padding: 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #5d0000;
+            transition: 0.2s;
+        }
+
+        button[type="submit"]:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #5d0000;
+        }
+
+        #message { margin-top: 15px; font-weight: bold; min-height: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <h1>FAP FAP</h1>
+        <div class="tagline">Le cercle des initiés</div>
+        
+        <div class="mode-selector">
+            <button class="mode-btn active" onclick="setMode('player', this)">JOUER</button>
+            <button class="mode-btn" onclick="setMode('katika', this)">KATIKA</button>
+            <button class="mode-btn full-width" onclick="setMode('free', this)">ENTRÉE LIBRE (SPECTATEUR)</button>
+        </div>
+
+        <div id="loginSection">
+            <form id="loginForm">
+                <input type="text" id="phone" placeholder="N° de téléphone" required>
+                <input type="password" id="password" placeholder="Mot de passe" required>
+                <button type="submit">ENTRER SUR LA TABLE</button>
+            </form>
+        </div>
+        
+        <div id="message"></div>
+    </div>
+
+    <script>
+        let currentMode = 'player';
+
+        function setMode(mode, btn) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const loginSection = document.getElementById('loginSection');
+            const message = document.getElementById('message');
+            message.innerText = "";
+
+            if (mode === 'free') {
+                loginSection.style.display = 'none';
+                message.innerHTML = `<button onclick="window.location.href='dashboard.html?mode=free'" class="mode-btn" style="width:100%; background:var(--gold); color:var(--wood)">ACCÉDER AUX SALLES</button>`;
+            } else {
+                loginSection.style.display = 'block';
+                message.innerHTML = "";
+            }
+        }
+    </script>
+    <script src="script.js"></script>
+</body>
+</html>
