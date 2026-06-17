@@ -12,9 +12,10 @@ const { Server } = require('socket.io');
 const cors       = require('cors');
 const db         = require('./config/db');
 
-const moneyRoutes = require('./routes/moneyRoutes');
-const authRoutes  = require('./routes/authRoutes');
-const adminRoutes = require('./routes/adminRoutes');
+const moneyRoutes  = require('./routes/moneyRoutes');
+const authRoutes   = require('./routes/authRoutes');
+const adminRoutes  = require('./routes/adminRoutes');
+const salonRoutes  = require('./routes/salonRoutes');
 
 // Sprint 5 — CORS whitelist (remplace origin: "*")
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
@@ -38,6 +39,7 @@ app.use(express.json());
 app.use('/api/money', moneyRoutes);
 app.use('/api/auth',  authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/salon', salonRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -392,9 +394,17 @@ function handleDeparture(socket, tableId) {
 
     table.players.splice(pIdx, 1);
 
+    // Salon 2.0 : nettoyer le siège en DB si table salon
+    if (tableId.startsWith('salon_') && socket.userId) {
+        const salonId = parseInt(tableId.replace('salon_', ''), 10);
+        db.query('DELETE FROM table_seats WHERE table_id=$1 AND user_id=$2', [salonId, socket.userId])
+            .catch(e => console.error('[handleDeparture] seat cleanup:', e.message));
+    }
+
     if (table.players.length === 0) {
         clearTurnTimer(tableId);
         delete tables[tableId];
+        if (tableId.startsWith('salon_')) broadcastSalonState();
         return;
     }
 
@@ -417,6 +427,28 @@ function handleDeparture(socket, tableId) {
         } else if (active.length > 1 && wasInTurn) {
             passTurn(tableId);
         }
+    }
+}
+
+// ============================================================
+// SALON 2.0 — Diffusion de l'état du salon à tous les clients
+// ============================================================
+
+async function broadcastSalonState() {
+    try {
+        const { rows } = await db.query('SELECT * FROM v_salon_state');
+        // Enrichir avec l'état RAM (statut de partie en cours)
+        const state = rows.map(row => {
+            const ram = tables[`salon_${row.table_id}`];
+            return {
+                ...row,
+                live_players: ram ? ram.players.length : Number(row.seated_count),
+                game_status:  ram ? ram.status : 'WAITING'
+            };
+        });
+        io.emit('salon-state', state);
+    } catch (err) {
+        console.error('[broadcastSalonState]', err.message);
     }
 }
 
@@ -834,8 +866,288 @@ io.on('connection', (socket) => {
 
     socket.on('stand-up', (data) => handleDeparture(socket, `club_${data.club_id}`));
 
+    // ============================================================
+    // SALON 2.0 — Événements dynamiques
+    // ============================================================
+
+    // Joueur entre dans le lobby salon — reçoit l'état complet
+    socket.on('join-salon', async () => {
+        try {
+            const { rows } = await db.query('SELECT * FROM v_salon_state');
+            const state = rows.map(row => {
+                const ram = tables[`salon_${row.table_id}`];
+                return {
+                    ...row,
+                    live_players: ram ? ram.players.length : Number(row.seated_count),
+                    game_status:  ram ? ram.status : 'WAITING'
+                };
+            });
+            socket.emit('salon-state', state);
+        } catch (err) {
+            console.error('[join-salon]', err.message);
+        }
+    });
+
+    // Joueur résout un lien d'invitation
+    socket.on('table-invite', async (data) => {
+        if (!data?.token) return;
+        try {
+            const { rows } = await db.query(
+                `SELECT id, name, min_bet, max_players, status
+                 FROM salon_tables WHERE invite_token=$1 AND status!='closed'`,
+                [data.token]
+            );
+            if (!rows.length) {
+                socket.emit('join-refused', { reason: 'Lien d\'invitation invalide ou expiré.' });
+                return;
+            }
+            socket.emit('invite-resolved', rows[0]);
+        } catch (err) {
+            console.error('[table-invite]', err.message);
+        }
+    });
+
+    // Joueur s'assoit à une table salon
+    socket.on('sit-at-table', async (data) => {
+        if (!data?.salon_table_id || !data?.username) return;
+        const salonId = parseInt(data.salon_table_id, 10);
+        const tableId = `salon_${salonId}`;
+
+        try {
+            // Vérifier que la table est ouverte
+            const { rows: tRows } = await db.query(
+                `SELECT * FROM salon_tables WHERE id=$1 AND status='open'`,
+                [salonId]
+            );
+            if (!tRows.length) {
+                socket.emit('join-refused', { reason: 'Table indisponible ou partie en cours.' });
+                return;
+            }
+            const salonTable = tRows[0];
+
+            // Charger l'utilisateur (même logique que join-table)
+            const { rows: uRows } = await db.query(
+                'SELECT id, wallet, role, status FROM users WHERE username=$1',
+                [data.username]
+            );
+            if (!uRows.length) {
+                socket.emit('join-refused', { reason: 'Utilisateur introuvable.' });
+                return;
+            }
+            const u = uRows[0];
+            if (u.status !== 'active') {
+                socket.emit('join-refused', { reason: 'Compte suspendu. Contactez votre Katika.' });
+                return;
+            }
+
+            const userBalance = parseFloat(u.wallet);
+            socket.userId   = u.id;
+            socket.userRole = u.role;
+            connectedSockets.set(u.id, socket.id);
+
+            // Vérifier solde minimum
+            if (userBalance < parseFloat(salonTable.min_bet)) {
+                socket.emit('join-refused', {
+                    reason: `Solde insuffisant. Minimum requis : ${salonTable.min_bet} FCFA.`
+                });
+                return;
+            }
+
+            // Vérifier places disponibles
+            const { rows: seatRows } = await db.query(
+                'SELECT seat_number FROM table_seats WHERE table_id=$1 ORDER BY seat_number',
+                [salonId]
+            );
+            if (seatRows.length >= salonTable.max_players) {
+                socket.emit('join-refused', { reason: 'Table complète.' });
+                return;
+            }
+
+            // Trouver le premier siège libre
+            const occupied = seatRows.map(r => r.seat_number);
+            let seatNum = 1;
+            while (occupied.includes(seatNum)) seatNum++;
+
+            // Insérer en DB (ON CONFLICT DO NOTHING si déjà assis)
+            await db.query(
+                `INSERT INTO table_seats (table_id, user_id, seat_number)
+                 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+                [salonId, u.id, seatNum]
+            );
+
+            // Charger compteur de fraude (même logique que join-table)
+            const { rows: fRows } = await db.query(
+                `SELECT COUNT(*)::int AS cnt FROM audit_logs
+                 WHERE user_id=$1 AND action='claim_fraud'
+                   AND created_at > NOW() - INTERVAL '24 hours'`,
+                [u.id]
+            );
+            const fraudCount = fRows[0]?.cnt || 0;
+
+            // Initialiser l'état RAM si première arrivée
+            if (!tables[tableId]) {
+                tables[tableId] = {
+                    players: [], pot: 0, stake: parseFloat(salonTable.min_bet),
+                    status: 'WAITING', turnIndex: 0, dealerIndex: 0,
+                    cardsOnTable: [], cardsPlayedInRound: 0,
+                    clubId: salonTable.club_id, salonTableId: salonId,
+                    gameSessionId: null, turnTimer: null
+                };
+            }
+
+            const table = tables[tableId];
+            if (!table.players.find(p => p.username === data.username)) {
+                table.players.push({
+                    id:               socket.id,
+                    dbId:             u.id,
+                    username:         data.username,
+                    wallet:           userBalance,
+                    hand:             [],
+                    avatar:           `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.username}`,
+                    isInHand:         true,
+                    isPassing:        false,
+                    passedCards:      [],
+                    suspiciousClaims: fraudCount
+                });
+            }
+
+            socket.join(tableId);
+            socket.salonTableId = salonId;
+            socket.emit('wallet-update', { balance: userBalance });
+            io.to(tableId).emit('player-list-update', table.players);
+            const dealer = table.players[table.dealerIndex];
+            if (dealer) io.to(tableId).emit('update-dealer', { dealerId: dealer.id });
+            logAction(tableId, `${data.username} s'est assis à la table.`);
+            broadcastSalonState();
+
+        } catch (err) {
+            console.error('[sit-at-table]', err.message);
+        }
+    });
+
+    // Joueur observe une table (sans siège)
+    socket.on('observe-table', async (data) => {
+        if (!data?.salon_table_id || !socket.userId) return;
+        const salonId = parseInt(data.salon_table_id, 10);
+        const tableId = `salon_${salonId}`;
+
+        try {
+            await db.query(
+                `INSERT INTO table_observers (table_id, user_id)
+                 VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                [salonId, socket.userId]
+            );
+            socket.join(tableId);
+            socket.salonObserving = salonId;
+
+            // Envoyer l'état actuel de la table à l'observateur
+            const table = tables[tableId];
+            if (table) {
+                socket.emit('player-list-update', table.players);
+                if (table.dealerIndex !== undefined) {
+                    const dealer = table.players[table.dealerIndex];
+                    if (dealer) socket.emit('update-dealer', { dealerId: dealer.id });
+                }
+            }
+            broadcastSalonState();
+        } catch (err) {
+            console.error('[observe-table]', err.message);
+        }
+    });
+
+    // Joueur quitte sa table (se lève ou arrête d'observer)
+    socket.on('leave-table', async (data) => {
+        if (!data?.salon_table_id) return;
+        const salonId = parseInt(data.salon_table_id, 10);
+        const tableId = `salon_${salonId}`;
+
+        if (socket.userId) {
+            try {
+                await db.query('DELETE FROM table_seats    WHERE table_id=$1 AND user_id=$2', [salonId, socket.userId]);
+                await db.query('DELETE FROM table_observers WHERE table_id=$1 AND user_id=$2', [salonId, socket.userId]);
+            } catch (err) {
+                console.error('[leave-table] DB cleanup:', err.message);
+            }
+        }
+
+        // Retirer de la RAM uniquement si pas de partie en cours
+        const table = tables[tableId];
+        if (table && table.status === 'WAITING') {
+            const pIdx = table.players.findIndex(p => p.id === socket.id);
+            if (pIdx !== -1) {
+                const player = table.players[pIdx];
+                table.players.splice(pIdx, 1);
+                logAction(tableId, `${player.username} a quitté la table.`);
+                io.to(tableId).emit('player-list-update', table.players);
+                if (table.players.length === 0) delete tables[tableId];
+            }
+        }
+
+        socket.leave(tableId);
+        socket.salonTableId  = null;
+        socket.salonObserving = null;
+        broadcastSalonState();
+    });
+
+    // Joueur change de table (atomique : leave + sit)
+    socket.on('change-table', async (data) => {
+        if (!data?.from_table_id || !data?.to_table_id) return;
+        const fromId  = parseInt(data.from_table_id, 10);
+        const fromKey = `salon_${fromId}`;
+
+        // Quitter la table actuelle
+        if (socket.userId) {
+            try {
+                await db.query('DELETE FROM table_seats     WHERE table_id=$1 AND user_id=$2', [fromId, socket.userId]);
+                await db.query('DELETE FROM table_observers WHERE table_id=$1 AND user_id=$2', [fromId, socket.userId]);
+            } catch (err) {
+                console.error('[change-table] DB cleanup:', err.message);
+            }
+        }
+        const fromTable = tables[fromKey];
+        if (fromTable && fromTable.status === 'WAITING') {
+            const pIdx = fromTable.players.findIndex(p => p.id === socket.id);
+            if (pIdx !== -1) {
+                fromTable.players.splice(pIdx, 1);
+                io.to(fromKey).emit('player-list-update', fromTable.players);
+                if (fromTable.players.length === 0) delete tables[fromKey];
+            }
+        }
+        socket.leave(fromKey);
+
+        // Rediriger vers sit-at-table sur la nouvelle table
+        socket.emit('change-table-ack', { salon_table_id: data.to_table_id });
+    });
+
+    // Admin crée une table via socket (alternative REST)
+    socket.on('create-table', async (data) => {
+        if (socket.userRole !== 'superadmin' && socket.userRole !== 'katika') {
+            socket.emit('action-refused', { reason: 'Non autorisé.' });
+            return;
+        }
+        try {
+            const { rows } = await db.query(
+                `INSERT INTO salon_tables (name, min_bet, max_players, created_by)
+                 VALUES ($1, $2, $3, $4)
+                 RETURNING id, name, min_bet, max_players, status, invite_token`,
+                [data.name || 'Nouvelle Table', data.min_bet || 100, data.max_players || 4, socket.userId]
+            );
+            socket.emit('table-created', rows[0]);
+            broadcastSalonState();
+        } catch (err) {
+            console.error('[create-table]', err.message);
+        }
+    });
+
     socket.on('disconnect', () => {
         if (socket.userId) connectedSockets.delete(socket.userId);
+
+        // Salon 2.0 : nettoyer observateurs en DB
+        if (socket.userId && socket.salonObserving) {
+            db.query('DELETE FROM table_observers WHERE user_id=$1', [socket.userId])
+                .catch(e => console.error('[disconnect] observer cleanup:', e.message));
+        }
+
         for (const tId in tables) handleDeparture(socket, tId);
     });
 });
