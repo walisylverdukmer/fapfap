@@ -2,18 +2,14 @@
 // FAP FAP 2.0 — Salon de jeu dynamique
 // =====================================================
 
+if (!AuthGuard.require([])) throw 0;
 const socket = io(BACKEND_URL);
-const user   = JSON.parse(localStorage.getItem('user'));
-const token  = localStorage.getItem('token');
+const user   = AuthGuard.getUser();
+const token  = AuthGuard.getToken();
 
 // Nettoyage salon_table_id d'une session précédente
 localStorage.removeItem('salon_table_id');
 localStorage.removeItem('salon_observer');
-
-// Vérification auth
-if (!user || !token) {
-    window.location.replace('index.html');
-}
 
 // Afficher le nom en header
 document.getElementById('header-username').innerText = user.username || '—';
@@ -34,12 +30,38 @@ socket.on('connect', () => {
     setStatus(true);
     socket.emit('join-salon');
 
-    // Gestion lien d'invitation dans l'URL (?invite=TOKEN)
     const params = new URLSearchParams(window.location.search);
+
+    // Gestion lien d'invitation dans l'URL (?invite=TOKEN)
     const inviteToken = params.get('invite');
     if (inviteToken) {
         socket.emit('table-invite', { token: inviteToken });
     }
+
+    // Attribution automatique (?auto=1) — vient de /play après connexion
+    if (params.get('auto') === '1') {
+        document.getElementById('salon-subtitle').innerText =
+            'Recherche d\'une table disponible...';
+        socket.emit('auto-assign');
+    }
+});
+
+// =====================================================
+// ATTRIBUTION AUTOMATIQUE
+// =====================================================
+
+socket.on('auto-assigned', (data) => {
+    if (data.error) {
+        document.getElementById('salon-subtitle').innerText =
+            'Aucune table disponible automatiquement — choisissez ci-dessous.';
+        return;
+    }
+    // Ouvrir directement le modal "s'asseoir" sur la table trouvée
+    openSitModal({
+        table_id:   data.salon_table_id,
+        table_name: data.table_name,
+        min_bet:    data.min_bet
+    });
 });
 
 socket.on('disconnect', () => setStatus(false));
@@ -231,8 +253,6 @@ function setStatus(connected) {
 }
 
 function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
     socket.disconnect();
-    window.location.replace('index.html');
+    AuthGuard.logout();
 }

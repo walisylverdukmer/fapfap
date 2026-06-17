@@ -9,6 +9,18 @@ const authController = require('../controllers/authController');
 router.post('/login', authController.login);
 
 /**
+ * @route   POST /api/auth/check-phone
+ * @desc    Vérifie si un numéro existe déjà (pour /play — sans auth)
+ */
+router.post('/check-phone', authController.checkPhone);
+
+/**
+ * @route   POST /api/auth/register-or-login
+ * @desc    Connexion si compte existant, inscription sinon (flux /play)
+ */
+router.post('/register-or-login', authController.registerOrLogin);
+
+/**
  * @route   POST /api/auth/register-katika
  * @desc    Action de Wali Sylver : Créer un gestionnaire (Katika) + son Club
  */

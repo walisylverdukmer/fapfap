@@ -1,10 +1,6 @@
-const user = JSON.parse(localStorage.getItem('user'));
-const token = localStorage.getItem('token');
-
-// Sécurité : Redirection si non connecté ou rôle inapproprié
-if (!user || (user.role !== 'katika' && user.role !== 'superadmin')) {
-    window.location.replace("index.html");
-}
+if (!AuthGuard.require(['katika', 'superadmin'])) throw 0;
+const user  = AuthGuard.getUser();
+const token = AuthGuard.getToken();
 
 async function initClub() {
     // Affichage infos utilisateur
@@ -153,8 +149,7 @@ async function manageBalance(playerId, playerName) {
 }
 
 function logout() {
-    localStorage.clear();
-    window.location.href = "index.html";
+    AuthGuard.logout();
 }
 
 // Lancement

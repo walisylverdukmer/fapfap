@@ -46,6 +46,16 @@ app.use('/api/auth',  authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/salon', salonRoutes);
 
+// Empêche la mise en cache des pages HTML protégées (fix retour arrière après logout)
+app.use((req, res, next) => {
+    if (req.path.endsWith('.html') || req.path === '/') {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+    }
+    next();
+});
+
 // Fichiers statiques client (dev local + Render production)
 app.use(express.static(path.join(__dirname, '..', 'client')));
 
@@ -139,9 +149,9 @@ async function autoSuspendCheater(player, tableId, socket) {
 // Sprint 5 — Timer de tour
 function clearTurnTimer(tableId) {
     const table = tables[tableId];
-    if (!table || !table.turnTimer) return;
-    clearTimeout(table.turnTimer);
-    table.turnTimer = null;
+    if (!table) return;
+    if (table.turnTimer)        { clearTimeout(table.turnTimer);          table.turnTimer = null; }
+    if (table.turnTickInterval) { clearInterval(table.turnTickInterval);  table.turnTickInterval = null; }
 }
 
 function startTurnTimer(tableId) {
@@ -151,6 +161,17 @@ function startTurnTimer(tableId) {
 
     const expectedId = table.players[table.turnIndex]?.id;
     if (!expectedId) return;
+
+    // Tick chaque seconde — countdown visible côté client
+    let secondsLeft = Math.floor(TURN_TIMEOUT_MS / 1000);
+    table.turnTickInterval = setInterval(() => {
+        secondsLeft--;
+        io.to(tableId).emit('turn-tick', { secondsLeft, playerId: expectedId });
+        if (secondsLeft <= 0) {
+            clearInterval(table.turnTickInterval);
+            table.turnTickInterval = null;
+        }
+    }, 1000);
 
     table.turnTimer = setTimeout(() => {
         const t = tables[tableId];
@@ -530,7 +551,8 @@ io.on('connection', (socket) => {
                 cardsPlayedInRound: 0,
                 clubId: data.club_id,
                 gameSessionId: null,
-                turnTimer: null   // Sprint 5
+                turnTimer: null,
+                turnTickInterval: null
             };
         }
 
@@ -1006,7 +1028,7 @@ io.on('connection', (socket) => {
                     status: 'WAITING', turnIndex: 0, dealerIndex: 0,
                     cardsOnTable: [], cardsPlayedInRound: 0,
                     clubId: salonTable.club_id, salonTableId: salonId,
-                    gameSessionId: null, turnTimer: null
+                    gameSessionId: null, turnTimer: null, turnTickInterval: null
                 };
             }
 
@@ -1151,6 +1173,38 @@ io.on('connection', (socket) => {
 
         // Rediriger vers sit-at-table sur la nouvelle table
         socket.emit('change-table-ack', { salon_table_id: data.to_table_id });
+    });
+
+    // Attribution automatique de table — choisit la meilleure table disponible
+    socket.on('auto-assign', async () => {
+        try {
+            const { rows } = await db.query(`
+                SELECT st.id, st.name, st.min_bet, st.max_players,
+                       COUNT(ts.id)::int AS seated_count
+                FROM   salon_tables st
+                LEFT   JOIN table_seats ts ON st.id = ts.table_id
+                WHERE  st.status = 'open'
+                GROUP  BY st.id
+                HAVING COUNT(ts.id) < st.max_players
+                ORDER  BY
+                    CASE WHEN COUNT(ts.id) > 0 THEN 0 ELSE 1 END,
+                    COUNT(ts.id) DESC,
+                    st.id ASC
+                LIMIT 1
+            `);
+            if (rows.length) {
+                socket.emit('auto-assigned', {
+                    salon_table_id: rows[0].id,
+                    table_name:     rows[0].name,
+                    min_bet:        rows[0].min_bet
+                });
+            } else {
+                socket.emit('auto-assigned', { error: 'Aucune table disponible.' });
+            }
+        } catch (err) {
+            console.error('[auto-assign]', err.message);
+            socket.emit('auto-assigned', { error: 'Erreur serveur.' });
+        }
     });
 
     // Admin crée une table via socket (alternative REST)

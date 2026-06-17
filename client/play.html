@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAP FAP — Accès rapide</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0a 100%);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .play-card {
+            background: #161616;
+            border: 1px solid #333;
+            border-radius: 18px;
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        }
+
+        .play-logo {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .play-logo h1 {
+            color: var(--gold);
+            font-size: 2rem;
+            letter-spacing: 4px;
+            margin: 0 0 6px 0;
+            text-shadow: 0 0 20px rgba(241,196,15,0.4);
+        }
+        .play-logo p {
+            color: #666;
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            color: #aaa;
+            font-size: 0.82rem;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .form-group input {
+            width: 100%;
+            background: #222;
+            border: 1px solid #3a3a3a;
+            color: white;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .form-group input:focus { border-color: var(--gold); }
+        .form-group input::placeholder { color: #555; }
+
+        #username-group {
+            display: none; /* révélé si nouveau joueur */
+        }
+
+        .hint-text {
+            font-size: 0.78rem;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        #play-error {
+            background: rgba(231,76,60,0.15);
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        #play-success {
+            background: rgba(46,204,113,0.15);
+            border: 1px solid #2ecc71;
+            color: #2ecc71;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .btn-play-submit {
+            width: 100%;
+            background: var(--gold);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            margin-top: 4px;
+        }
+        .btn-play-submit:hover { background: #d4ac0d; transform: translateY(-1px); }
+        .btn-play-submit:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
+
+        .play-footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #555;
+            font-size: 0.78rem;
+        }
+        .play-footer a { color: var(--gold); text-decoration: none; }
+        .play-footer a:hover { text-decoration: underline; }
+
+        .suits {
+            text-align: center;
+            font-size: 1.6rem;
+            letter-spacing: 8px;
+            margin-bottom: 6px;
+            opacity: 0.4;
+        }
+
+        @media (max-width: 440px) {
+            .play-card { padding: 28px 20px; }
+            .play-logo h1 { font-size: 1.6rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="play-card">
+        <div class="play-logo">
+            <div class="suits">♠ ♥ ♣ ♦</div>
+            <h1>FAP FAP</h1>
+            <p>Entrez vos informations pour jouer</p>
+        </div>
+
+        <form id="play-form">
+            <div class="form-group">
+                <label for="play-phone">Numéro de téléphone</label>
+                <input type="tel" id="play-phone" placeholder="Ex : 6 70 00 00 00"
+                       autocomplete="tel" required>
+            </div>
+
+            <div class="form-group" id="username-group">
+                <label for="play-username">Votre sobriquet <span style="color:#e74c3c">*</span></label>
+                <input type="text" id="play-username" placeholder="Ex : Le Lion"
+                       maxlength="30" autocomplete="nickname">
+                <p class="hint-text">Nouveau joueur uniquement — votre nom sur la table.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="play-password">Mot de passe</label>
+                <input type="password" id="play-password" placeholder="Votre mot de passe"
+                       autocomplete="current-password" required>
+            </div>
+
+            <div id="play-error"></div>
+            <div id="play-success"></div>
+
+            <button type="submit" class="btn-play-submit" id="play-submit">
+                ENTRER DANS LE SALON
+            </button>
+        </form>
+
+        <div class="play-footer">
+            <a href="index.html">← Connexion classique</a>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="play.js"></script>
+</body>
+</html>

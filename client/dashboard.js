@@ -1,11 +1,7 @@
-const user = JSON.parse(localStorage.getItem('user'));
+if (!AuthGuard.require([])) throw 0;
+const user = AuthGuard.getUser();
 
 async function initDashboard() {
-    // Si pas de session, retour au login
-    if (!user) {
-        window.location.href = "index.html";
-        return;
-    }
 
     // Affichage du nom d'utilisateur
     const welcomeMsg = document.getElementById('welcomeMsg');
@@ -105,8 +101,7 @@ function joinGame(clubId) {
 }
 
 function logout() {
-    localStorage.clear();
-    window.location.href = "index.html";
+    AuthGuard.logout();
 }
 
 // Lancement

@@ -1,11 +1,8 @@
+if (!AuthGuard.require(['player', 'katika', 'superadmin'])) throw 0;
 const socket = io(BACKEND_URL);
 
 // --- INITIALISATION UTILISATEUR ---
-const user = JSON.parse(localStorage.getItem('user')) || {
-    username: "Joueur_" + Math.floor(Math.random()*100),
-    club_id: 1,
-    stake: 500
-};
+const user = AuthGuard.getUser();
 const salonTableId  = parseInt(localStorage.getItem('salon_table_id')) || null;
 const isObserver    = localStorage.getItem('salon_observer') === '1';
 
@@ -41,18 +38,38 @@ if (salonTableId && isObserver) {
     });
 }
 
-// Mode observateur : bannière + blocage actions
+// Mode observateur : bannière + verrouillage complet de l'UI
 if (isObserver) {
     document.addEventListener('DOMContentLoaded', () => {
+        // Bannière persistante
         const banner = document.createElement('div');
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#1a1a6e;color:#aad4ff;text-align:center;padding:6px;font-size:0.82rem;z-index:999;';
-        banner.innerText = 'MODE OBSERVATEUR — Vous regardez la partie sans jouer';
-        document.body.prepend(banner);
-        // Masquer tous les boutons d'action
-        ['distribBtn','special-actions'].forEach(id => {
+        banner.id = 'observer-banner';
+        banner.style.cssText = [
+            'position:fixed', 'top:62px', 'left:0', 'right:0',
+            'background:rgba(26,26,110,0.92)', 'color:#aad4ff',
+            'text-align:center', 'padding:5px 10px', 'font-size:0.82rem',
+            'z-index:1050', 'border-bottom:1px solid #3a3a8e',
+            'pointer-events:none'
+        ].join(';');
+        banner.innerText = 'MODE OBSERVATEUR — Vous regardez sans jouer';
+        document.body.appendChild(banner);
+
+        // Masquer les éléments réservés aux joueurs
+        ['distribBtn', 'special-actions', 'my-hand', 'my-wallet-amount'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
+
+        // Le bouton "SE LEVER" devient "QUITTER" pour l'observateur
+        const btnLeave = document.getElementById('btn-leave-table');
+        if (btnLeave) {
+            btnLeave.innerText  = 'QUITTER';
+            btnLeave.onclick    = () => goToSalon();
+        }
+
+        // Masquer le chat input (observateur peut lire mais pas écrire)
+        const chatInput = document.querySelector('.chat-input-area');
+        if (chatInput) chatInput.style.display = 'none';
     });
 }
 
@@ -592,4 +609,117 @@ function showAnnouncement(text, duration = 2000) {
         setTimeout(() => { el.style.opacity = "0"; }, duration);
     }
 }
+
+// =====================================================
+// TIMER DE TOUR (turn-tick)
+// =====================================================
+
+const TURN_TOTAL_SEC = 30;
+
+socket.on('turn-tick', (data) => {
+    const timerEl = document.getElementById('turn-timer');
+    const secEl   = document.getElementById('timer-sec');
+    const barEl   = document.getElementById('timer-bar');
+    if (!timerEl) return;
+
+    const s = data.secondsLeft;
+
+    if (s <= 0) {
+        timerEl.style.display = 'none';
+        return;
+    }
+
+    timerEl.style.display = 'flex';
+    secEl.innerText = s;
+    secEl.className = s <= 8 ? 'urgent' : '';
+
+    const pct = Math.max(0, (s / TURN_TOTAL_SEC) * 100);
+    barEl.style.width      = pct + '%';
+    barEl.style.background = s > 10 ? '#2ecc71' : (s > 5 ? '#e67e22' : '#e74c3c');
+});
+
+// Cacher le timer quand ce n'est plus mon tour
+socket.on('next-turn', () => {
+    const timerEl = document.getElementById('turn-timer');
+    if (timerEl) timerEl.style.display = 'none';
+});
+socket.on('game-over', () => {
+    const timerEl = document.getElementById('turn-timer');
+    if (timerEl) timerEl.style.display = 'none';
+});
+
+// =====================================================
+// CHANGER DE TABLE (modal)
+// =====================================================
+
+function handleLeave() {
+    if (salonTableId) {
+        openChangeTableModal();
+    } else {
+        standUp();
+    }
+}
+
+function openChangeTableModal() {
+    const modal = document.getElementById('modal-change-table');
+    const list  = document.getElementById('ct-table-list');
+    modal.classList.add('open');
+    list.innerHTML = '<p style="color:#666;text-align:center;padding:20px 0">Chargement...</p>';
+
+    fetch(BACKEND_URL + '/api/salon/tables')
+        .then(r => r.json())
+        .then(tables => {
+            if (!tables || tables.length === 0) {
+                list.innerHTML = '<p style="color:#666;text-align:center;padding:20px 0">Aucune table disponible.</p>';
+                return;
+            }
+            list.innerHTML = tables.map(t => {
+                const isPlaying = t.status === 'playing';
+                const isCurrent = t.table_id === salonTableId;
+                const locked    = isPlaying || isCurrent;
+                const badge     = isPlaying
+                    ? '<span class="ct-badge ct-badge-playing">En cours</span>'
+                    : '<span class="ct-badge ct-badge-open">Libre</span>';
+                const click = locked ? '' : `onclick="selectChangeTable(${t.table_id})"`;
+                const label = isCurrent ? ' (table actuelle)' : '';
+                return `
+                    <div class="ct-row ${locked ? 'ct-locked' : ''}" ${click}>
+                        <span class="ct-name">${t.table_name}${label}</span>
+                        <span class="ct-info">${t.seated_count || 0}/${t.max_players} · ${t.min_bet} FCFA</span>
+                        ${badge}
+                    </div>`;
+            }).join('');
+        })
+        .catch(() => {
+            list.innerHTML = '<p style="color:#e74c3c;text-align:center;padding:20px 0">Erreur de chargement.</p>';
+        });
+}
+
+function closeChangeTable() {
+    document.getElementById('modal-change-table').classList.remove('open');
+}
+
+function goToSalon() {
+    if (salonTableId) {
+        socket.emit('leave-table', { salon_table_id: salonTableId });
+        localStorage.removeItem('salon_table_id');
+        localStorage.removeItem('salon_observer');
+    }
+    window.location.href = 'salon.html';
+}
+
+function selectChangeTable(newTableId) {
+    if (!newTableId || newTableId === salonTableId) return;
+    socket.emit('change-table', {
+        from_table_id: salonTableId,
+        to_table_id:   newTableId
+    });
+    closeChangeTable();
+}
+
+socket.on('change-table-ack', (data) => {
+    localStorage.setItem('salon_table_id', data.salon_table_id);
+    localStorage.removeItem('salon_observer');
+    window.location.reload();
+});
 

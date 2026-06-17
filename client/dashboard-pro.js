@@ -1,10 +1,6 @@
-// Vérification de sécurité au chargement
-const user = JSON.parse(localStorage.getItem('user'));
-const token = localStorage.getItem('token');
-
-if (!user || user.role !== 'superadmin') {
-    window.location.replace("index.html");
-}
+if (!AuthGuard.require(['superadmin'])) throw 0;
+const user  = AuthGuard.getUser();
+const token = AuthGuard.getToken();
 
 // Initialisation de la page
 async function initAdmin() {
@@ -133,8 +129,7 @@ async function transferToKatika(id, amount) {
 }
 
 function logout() {
-    localStorage.clear();
-    window.location.replace("index.html");
+    AuthGuard.logout();
 }
 
 // Lancement

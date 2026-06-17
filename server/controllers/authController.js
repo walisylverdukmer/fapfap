@@ -102,7 +102,100 @@ exports.registerPlayer = async (req, res) => {
     }
 };
 
-// --- 3. LOGIQUE DE CONNEXION GÉNÉRALE ---
+// --- 3. VÉRIFICATION EXISTENCE NUMÉRO (pour /play — pas d'auth) ---
+exports.checkPhone = async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ msg: 'Téléphone requis.' });
+    try {
+        const { rows } = await db.query('SELECT id FROM users WHERE phone=$1', [phone]);
+        res.json({ exists: rows.length > 0 });
+    } catch (err) {
+        console.error('[checkPhone]', err.message);
+        res.status(500).json({ msg: 'Erreur serveur.' });
+    }
+};
+
+// --- 4. INSCRIPTION OU CONNEXION VIA /play (auto-detect) ---
+exports.registerOrLogin = async (req, res) => {
+    const { phone, username, password } = req.body;
+
+    if (!phone || !password) {
+        return res.status(400).json({ msg: 'Téléphone et mot de passe requis.' });
+    }
+
+    const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+    if (isRateLimited(clientIp)) {
+        return res.status(429).json({ msg: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    }
+
+    try {
+        const { rows: existing } = await db.query('SELECT * FROM users WHERE phone=$1', [phone]);
+
+        if (existing.length > 0) {
+            // — CONNEXION —
+            const user = existing[0];
+            if (user.status !== 'active') {
+                return res.status(403).json({ msg: 'Compte suspendu. Contactez votre Katika.' });
+            }
+            const isMatch = await bcrypt.compare(password, user.password);
+            if (!isMatch) {
+                return res.status(400).json({ msg: 'Mot de passe incorrect.' });
+            }
+            await db.query('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
+            const token = jwt.sign(
+                { id: user.id, role: user.role, club_id: user.club_id },
+                process.env.JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+            return res.json({
+                token,
+                user: { id: user.id, username: user.username, role: user.role, phone: user.phone, wallet: parseFloat(user.wallet), club_id: user.club_id },
+                isNew: false
+            });
+        }
+
+        // — INSCRIPTION —
+        if (!username || username.trim().length < 2) {
+            return res.status(400).json({ msg: 'Pseudo requis pour créer un compte (2 caractères minimum).' });
+        }
+
+        // Trouver le club Public (créé par migration 003)
+        const { rows: clubs } = await db.query("SELECT id FROM clubs WHERE name='Public' LIMIT 1");
+        if (!clubs.length) {
+            return res.status(500).json({ msg: 'Club public non configuré. Contactez l\'administrateur.' });
+        }
+        const publicClubId = clubs[0].id;
+
+        const salt           = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const { rows: newRows } = await db.query(
+            `INSERT INTO users (username, phone, password, role, wallet, club_id)
+             VALUES ($1, $2, $3, 'player', 0, $4)
+             RETURNING id, username, role, phone, wallet, club_id`,
+            [username.trim(), phone, hashedPassword, publicClubId]
+        );
+        const user = newRows[0];
+        await db.query('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
+
+        const token = jwt.sign(
+            { id: user.id, role: user.role, club_id: user.club_id },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        return res.status(201).json({
+            token,
+            user: { id: user.id, username: user.username, role: user.role, phone: user.phone, wallet: parseFloat(user.wallet), club_id: user.club_id },
+            isNew: true
+        });
+
+    } catch (err) {
+        console.error('[registerOrLogin]', err.message);
+        res.status(500).json({ msg: 'Erreur serveur.' });
+    }
+};
+
+// --- 5. LOGIQUE DE CONNEXION GÉNÉRALE ---
 exports.login = async (req, res) => {
     try {
         const { phone, password } = req.body;

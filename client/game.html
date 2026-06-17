@@ -2,8 +2,10 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-store">
     <title>Fap Fap 2026 - Table Live</title>
     <link rel="stylesheet" href="style.css">
+    <script src="auth-guard.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root { --gold: #f1c40f; --table-green: radial-gradient(#27ae60, #145a32); }
@@ -177,15 +179,93 @@
         .modal-content { background: linear-gradient(#2c3e50, #000); padding: 50px; border-radius: 30px; border: 5px solid var(--gold); text-align: center; }
         .winner-avatar-big { width: 150px; height: 150px; border-radius: 50%; border: 6px solid var(--gold); margin: 25px auto; overflow: hidden; }
         .winner-avatar-big img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* ── TIMER DE TOUR ── */
+        #turn-timer {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            margin-right: 12px;
+        }
+        #timer-bar-bg {
+            width: 90px; height: 6px;
+            background: #333; border-radius: 3px; overflow: hidden;
+        }
+        #timer-bar {
+            height: 100%; width: 100%;
+            background: #2ecc71;
+            border-radius: 3px;
+            transition: width 0.9s linear, background 0.5s;
+        }
+        #timer-sec {
+            font-size: 0.85rem; font-weight: bold; color: #fff;
+            min-width: 24px; text-align: right;
+        }
+        #timer-sec.urgent { color: #e74c3c; animation: pulse 0.5s infinite alternate; }
+        @keyframes pulse { from { opacity: 1; } to { opacity: 0.4; } }
+
+        /* ── MODAL CHANGER DE TABLE ── */
+        #modal-change-table {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.82);
+            z-index: 2500;
+            align-items: center;
+            justify-content: center;
+        }
+        #modal-change-table.open { display: flex; }
+        .ct-box {
+            background: #1a1a1a;
+            border: 1px solid var(--gold);
+            border-radius: 14px;
+            padding: 28px;
+            width: 90%; max-width: 420px;
+            max-height: 80vh;
+            display: flex; flex-direction: column;
+        }
+        .ct-box h2 { color: var(--gold); margin: 0 0 16px 0; font-size: 1.1rem; }
+        .ct-list { overflow-y: auto; flex: 1; margin-bottom: 16px; }
+        .ct-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 8px;
+            border: 1px solid #2a2a2a; margin-bottom: 6px;
+            cursor: pointer; transition: border-color 0.15s, background 0.15s;
+        }
+        .ct-row:hover { border-color: var(--gold); background: rgba(241,196,15,0.06); }
+        .ct-row.ct-locked { opacity: 0.45; cursor: not-allowed; }
+        .ct-name { flex: 1; font-weight: bold; font-size: 0.9rem; }
+        .ct-info { font-size: 0.78rem; color: #888; }
+        .ct-badge {
+            font-size: 0.7rem; padding: 2px 7px; border-radius: 12px;
+            font-weight: bold; text-transform: uppercase; white-space: nowrap;
+        }
+        .ct-badge-open    { background: #1a4731; color: #2ecc71; }
+        .ct-badge-playing { background: #4a1010; color: #e74c3c; }
+        .ct-actions { display: flex; gap: 10px; }
+        .ct-btn-salon {
+            flex: 1; background: var(--gold); color: #000;
+            border: none; border-radius: 7px; padding: 10px;
+            font-weight: bold; cursor: pointer; font-size: 0.9rem;
+        }
+        .ct-btn-cancel {
+            flex: 1; background: transparent; color: #aaa;
+            border: 1px solid #444; border-radius: 7px; padding: 10px;
+            cursor: pointer; font-size: 0.9rem;
+        }
+        .ct-btn-cancel:hover { border-color: #888; color: #fff; }
     </style>
 </head>
 <body>
 
     <header class="admin-header">
         <h1><span>♠️</span> FAP FAP Kmer</h1>
+        <div id="turn-timer">
+            <div id="timer-bar-bg"><div id="timer-bar"></div></div>
+            <span id="timer-sec">30</span>s
+        </div>
         <div class="menu-bars">
-            <button class="btn-action btn-stand" onclick="standUp()">SE LEVER</button>
-            <button class="btn-action btn-leave" onclick="leaveClub()">QUITTER CLUB</button>
+            <button class="btn-action btn-stand" id="btn-leave-table" onclick="handleLeave()">SE LEVER</button>
+            <button class="btn-action btn-leave" onclick="leaveClub()">QUITTER</button>
         </div>
     </header>
 
@@ -263,6 +343,20 @@
             <button onclick="closeWinnerModal()" style="margin-top:40px; background:var(--gold); color:black; border:none; padding:15px 40px; border-radius:50px; font-size:1.2rem; font-weight:bold; cursor:pointer; transition:0.3s;">
                 REJOUER UNE MANCHE
             </button>
+        </div>
+    </div>
+
+    <!-- Modal : Changer de table -->
+    <div id="modal-change-table">
+        <div class="ct-box">
+            <h2>Changer de table</h2>
+            <div class="ct-list" id="ct-table-list">
+                <p style="color:#666; text-align:center; padding:20px 0">Chargement...</p>
+            </div>
+            <div class="ct-actions">
+                <button class="ct-btn-salon" onclick="goToSalon()">Retour au salon</button>
+                <button class="ct-btn-cancel" onclick="closeChangeTable()">Annuler</button>
+            </div>
         </div>
     </div>
 
