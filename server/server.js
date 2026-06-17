@@ -8,6 +8,7 @@ if (!process.env.JWT_SECRET) {
 
 const express    = require('express');
 const http       = require('http');
+const path       = require('path');
 const { Server } = require('socket.io');
 const cors       = require('cors');
 const db         = require('./config/db');
@@ -18,9 +19,13 @@ const adminRoutes  = require('./routes/adminRoutes');
 const salonRoutes  = require('./routes/salonRoutes');
 
 // Sprint 5 — CORS whitelist (remplace origin: "*")
-const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:5000', 'http://127.0.0.1:5000'];
+// Render injecte RENDER_EXTERNAL_URL automatiquement → auto-ajouté à la whitelist
+const ALLOWED_ORIGINS = [
+    ...(process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+        : ['http://localhost:5000', 'http://127.0.0.1:5000']),
+    ...(process.env.RENDER_EXTERNAL_URL ? [process.env.RENDER_EXTERNAL_URL] : [])
+];
 
 const corsOriginFn = (origin, callback) => {
     // Autorise les requêtes sans origine (file://, curl, Postman en dev)
@@ -40,6 +45,9 @@ app.use('/api/money', moneyRoutes);
 app.use('/api/auth',  authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/salon', salonRoutes);
+
+// Fichiers statiques client (dev local + Render production)
+app.use(express.static(path.join(__dirname, '..', 'client')));
 
 const server = http.createServer(app);
 const io = new Server(server, {
