@@ -39,7 +39,10 @@
 <body>
     <header style="padding: 15px; background: rgba(0,0,0,0.5); display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--gold);">
         <div class="logo" style="color: var(--gold); font-weight: bold; font-size: 1.5rem;">♠️ FAP FAP</div>
-        <div id="welcomeMsg" style="color: white; font-weight: bold;"></div>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div id="welcomeMsg" style="color: white; font-weight: bold;"></div>
+            <span id="rs-badge-slot"></span>
+        </div>
         <button onclick="logout()" style="background: #c62828; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">Déconnexion</button>
     </header>
 
@@ -79,6 +82,7 @@
     </div>
 
     <script src="config.js"></script>
+    <script src="role-switcher.js"></script>
     <script src="dashboard.js"></script>
 </body>
 </html>

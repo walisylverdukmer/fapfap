@@ -283,6 +283,7 @@
         <h1>FAP FAP — SALON</h1>
         <div class="user-info">
             <span>Connecté : <strong id="header-username">...</strong></span>
+            <span id="rs-badge-slot"></span>
             <button class="btn-logout" onclick="logout()">Déconnexion</button>
         </div>
     </div>
@@ -339,6 +340,7 @@
     <div id="connection-status" class="disconnected">Déconnecté</div>
 
     <script src="config.js"></script>
+    <script src="role-switcher.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="salon.js"></script>
 </body>
