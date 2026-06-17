@@ -28,8 +28,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
                 console.log("Accès Admin détecté. Redirection vers Dashboard Pro...");
                 window.location.replace("dashboard-pro.html");
             } else {
-                console.log("Accès standard. Redirection vers Dashboard...");
-                window.location.replace("dashboard.html");
+                console.log("Accès standard. Redirection vers Salon...");
+                window.location.replace("salon.html");
             }
             
         } else {

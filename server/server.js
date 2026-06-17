@@ -58,6 +58,13 @@ app.set('connectedSockets', connectedSockets);
 // FONCTIONS UTILITAIRES (hors connexion — accèdent à io/tables/db)
 // ============================================================
 
+// Salon 2.0 : résout le tableId RAM depuis les données du client
+// Priorité : salon_table_id (2.0) > club_id (legacy)
+function resolveTableId(data) {
+    if (data && data.salon_table_id) return `salon_${data.salon_table_id}`;
+    return `club_${data && data.club_id}`;
+}
+
 function logAction(tableId, message, type = 'info') {
     io.to(tableId).emit('history-update', {
         message,
@@ -461,7 +468,7 @@ io.on('connection', (socket) => {
 
     // --- 1. REJOINDRE ---
     socket.on('join-table', async (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         socket.join(tableId);
 
         let userBalance = 0;
@@ -543,7 +550,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('refresh-wallet', async (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         try {
             const { rows } = await db.query('SELECT wallet FROM users WHERE username=$1', [data.username]);
             if (rows.length > 0) {
@@ -564,7 +571,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send-chat', (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         io.to(tableId).emit('receive-chat', {
             username: data.username,
             message:  data.message,
@@ -574,7 +581,7 @@ io.on('connection', (socket) => {
 
     // --- 2. DÉBUT DE PARTIE ---
     socket.on('start-game', async (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         const table   = tables[tableId];
         if (!table || table.players.length < 2) return;
         const dealer = table.players[table.dealerIndex];
@@ -681,7 +688,7 @@ io.on('connection', (socket) => {
 
     // --- 3. ACTIONS DE JEU ---
     socket.on('fold-hand', (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         const table   = tables[tableId];
         // BUG-02 corrigé
         if (!table || table.status !== 'PLAYING' || table.cardsPlayedInRound >= 2) return;
@@ -696,7 +703,7 @@ io.on('connection', (socket) => {
 
             const active = table.players.filter(p => p.isInHand);
             if (active.length === 1) {
-                handleGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ', data.club_id, 'tous_banque');
+                handleGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ', table.clubId, 'tous_banque');
             } else if (table.players[table.turnIndex].id === socket.id) {
                 passTurn(tableId); // passTurn relance le timer
             } else {
@@ -706,7 +713,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('player-pass', (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         const table   = tables[tableId];
         if (!table || table.status !== 'PLAYING') return;
         const player = table.players.find(p => p.id === socket.id);
@@ -722,7 +729,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('card-played', async (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         const table   = tables[tableId];
         if (!table || table.status !== 'PLAYING') return;
         const currentPlayer = table.players[table.turnIndex];
@@ -815,7 +822,7 @@ io.on('connection', (socket) => {
 
     // BUG-01 + Sprint 5 : validation serveur + persistance fraude en base
     socket.on('claim-special-victory', async (data) => {
-        const tableId = `club_${data.club_id}`;
+        const tableId = resolveTableId(data);
         const table   = tables[tableId];
         const winner  = table?.players.find(p => p.id === socket.id);
         if (!winner || !winner.isInHand) return;
@@ -860,11 +867,11 @@ io.on('connection', (socket) => {
             'KORATTE': 'koratte', 'CARRE':  'carre',
             'TCHIA':   'tchia',   '3 SEPT': 'trois_sept', 'COULEUR': 'couleur'
         };
-        handleGameOver(tableId, winner, finalPot, data.reason, data.club_id,
+        handleGameOver(tableId, winner, finalPot, data.reason, table.clubId,
             winTypeMap[data.type] || 'normal');
     });
 
-    socket.on('stand-up', (data) => handleDeparture(socket, `club_${data.club_id}`));
+    socket.on('stand-up', (data) => handleDeparture(socket, resolveTableId(data)));
 
     // ============================================================
     // SALON 2.0 — Événements dynamiques
@@ -1027,9 +1034,28 @@ io.on('connection', (socket) => {
 
     // Joueur observe une table (sans siège)
     socket.on('observe-table', async (data) => {
-        if (!data?.salon_table_id || !socket.userId) return;
+        if (!data?.salon_table_id) return;
         const salonId = parseInt(data.salon_table_id, 10);
         const tableId = `salon_${salonId}`;
+
+        // Résoudre userId via socket ou via username fourni (nouveau socket)
+        if (!socket.userId && data.username) {
+            try {
+                const { rows } = await db.query(
+                    'SELECT id, status FROM users WHERE username=$1', [data.username]
+                );
+                if (!rows.length || rows[0].status !== 'active') {
+                    socket.emit('join-refused', { reason: 'Compte introuvable ou suspendu.' });
+                    return;
+                }
+                socket.userId = rows[0].id;
+                connectedSockets.set(rows[0].id, socket.id);
+            } catch (err) {
+                console.error('[observe-table] user lookup:', err.message);
+                return;
+            }
+        }
+        if (!socket.userId) return;
 
         try {
             await db.query(

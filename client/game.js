@@ -1,11 +1,13 @@
 const socket = io(BACKEND_URL);
 
 // --- INITIALISATION UTILISATEUR ---
-const user = JSON.parse(localStorage.getItem('user')) || { 
-    username: "Joueur_" + Math.floor(Math.random()*100), 
-    club_id: 1, 
-    stake: 500 
+const user = JSON.parse(localStorage.getItem('user')) || {
+    username: "Joueur_" + Math.floor(Math.random()*100),
+    club_id: 1,
+    stake: 500
 };
+const salonTableId  = parseInt(localStorage.getItem('salon_table_id')) || null;
+const isObserver    = localStorage.getItem('salon_observer') === '1';
 
 // --- VARIABLES GLOBALES ---
 let myHand = [];
@@ -17,12 +19,42 @@ let cardsPlayedInRound = 0;
 let currentDealerId = null; 
 
 // --- 1. CONNEXION INITIALE ---
-console.log("Connexion au club ID:", user.club_id);
-socket.emit('join-table', { 
-    club_id: user.club_id, 
-    username: user.username, 
-    stake: user.stake 
-});
+if (salonTableId && isObserver) {
+    console.log("Mode observateur — Table ID:", salonTableId);
+    socket.emit('observe-table', {
+        salon_table_id: salonTableId,
+        username: user.username
+    });
+} else if (salonTableId) {
+    console.log("Mode salon — Table ID:", salonTableId);
+    socket.emit('sit-at-table', {
+        salon_table_id: salonTableId,
+        username: user.username,
+        stake: user.stake
+    });
+} else {
+    console.log("Connexion au club ID:", user.club_id);
+    socket.emit('join-table', {
+        club_id: user.club_id,
+        username: user.username,
+        stake: user.stake
+    });
+}
+
+// Mode observateur : bannière + blocage actions
+if (isObserver) {
+    document.addEventListener('DOMContentLoaded', () => {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#1a1a6e;color:#aad4ff;text-align:center;padding:6px;font-size:0.82rem;z-index:999;';
+        banner.innerText = 'MODE OBSERVATEUR — Vous regardez la partie sans jouer';
+        document.body.prepend(banner);
+        // Masquer tous les boutons d'action
+        ['distribBtn','special-actions'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+    });
+}
 
 // --- GESTION DU SOLDE (WALLET) ---
 socket.on('wallet-update', (data) => {
@@ -49,6 +81,7 @@ function sendChatMessage() {
     if (message !== "") {
         socket.emit('send-chat', {
             club_id: user.club_id,
+            salon_table_id: salonTableId,
             username: user.username,
             message: message
         });
@@ -133,7 +166,7 @@ socket.on('player-list-update', (players) => {
             refreshBtn.innerHTML = "🔄";
             refreshBtn.style = "position:absolute; bottom:0; right:0; background:#3498db; border:none; color:white; border-radius:50%; width:25px; height:25px; cursor:pointer; z-index:20; font-size:12px;";
             refreshBtn.onclick = () => {
-                socket.emit('refresh-wallet', { username: user.username, club_id: user.club_id });
+                socket.emit('refresh-wallet', { username: user.username, club_id: user.club_id, salon_table_id: salonTableId });
                 showAnnouncement("Solde actualisé", 1000);
             };
             document.getElementById('my-avatar').style.position = 'relative';
@@ -214,6 +247,7 @@ function updateDealerUI() {
 
 // --- 5. LOGIQUE DES BOUTONS D'ACTION ---
 function updateActionPanel() {
+    if (isObserver) return;
     const actionContainer = document.getElementById('special-actions');
     if(!actionContainer) return;
     
@@ -228,7 +262,7 @@ function updateActionPanel() {
         passBtn.innerText = "🃏 SAY PASS";
         passBtn.onclick = () => {
             if(confirm("Voulez-vous bloquer vos 2 dernières cartes (PASS) ?")) {
-                socket.emit('player-pass', { club_id: user.club_id });
+                socket.emit('player-pass', { club_id: user.club_id, salon_table_id: salonTableId });
             }
         };
         actionContainer.appendChild(passBtn);
@@ -242,7 +276,7 @@ function updateActionPanel() {
         bankBtn.innerText = "🏦 BANQUE";
         bankBtn.onclick = () => {
             if(confirm("Banquer maintenant vous protège du Koratte. Confirmer ?")) {
-                socket.emit('fold-hand', { club_id: user.club_id });
+                socket.emit('fold-hand', { club_id: user.club_id, salon_table_id: salonTableId });
             }
         };
         actionContainer.appendChild(bankBtn);
@@ -272,7 +306,7 @@ function createBonusButton(label, type) {
     btn.className = 'btn-special blink-gold';
     btn.innerText = label;
     btn.onclick = () => {
-        socket.emit('claim-special-victory', { club_id: user.club_id, type: type, reason: label });
+        socket.emit('claim-special-victory', { club_id: user.club_id, salon_table_id: salonTableId, type: type, reason: label });
     };
     container.appendChild(btn);
 }
@@ -325,7 +359,7 @@ function renderHand() {
 
 function playCard(index) {
     const card = myHand[index];
-    socket.emit('card-played', { club_id: user.club_id, card: card });
+    socket.emit('card-played', { club_id: user.club_id, salon_table_id: salonTableId, card: card });
     // Ne pas retirer la carte optimistement : on attend display-card ou card-rejected
     isMyTurn = false;
     renderHand();
@@ -416,7 +450,21 @@ socket.on('game-over', (data) => {
     isPassing = false;
     cardsPlayedInRound = 0;
     renderHand();
-    document.getElementById('special-actions').innerHTML = '';
+    const actionsEl = document.getElementById('special-actions');
+    actionsEl.innerHTML = '';
+    if (salonTableId) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-special';
+        btn.style.background = '#2980b9';
+        btn.innerText = 'RETOUR AU SALON';
+        btn.onclick = () => {
+            localStorage.removeItem('salon_table_id');
+            localStorage.removeItem('salon_observer');
+            window.location.href = 'salon.html';
+        };
+        actionsEl.style.display = '';
+        actionsEl.appendChild(btn);
+    }
     updateDealerUI();
 });
 
@@ -448,7 +496,7 @@ socket.on('card-rejected', (data) => {
 socket.on('join-refused', (data) => {
     alert(`Accès refusé : ${data.reason}`);
     console.warn('[ACCÈS] Rejoindre refusé:', data.reason);
-    window.location.href = 'index.html';
+    window.location.href = salonTableId ? 'salon.html' : 'index.html';
 });
 
 // Sprint 5 : déconnexion forcée (suspension en cours de partie ou check périodique)
@@ -482,7 +530,11 @@ function closeWinnerModal() {
 }
 
 function sitDown() {
-    socket.emit('join-table', { club_id: user.club_id, username: user.username, stake: user.stake });
+    if (salonTableId) {
+        socket.emit('sit-at-table', { salon_table_id: salonTableId, username: user.username, stake: user.stake });
+    } else {
+        socket.emit('join-table', { club_id: user.club_id, username: user.username, stake: user.stake });
+    }
 }
 
 // === FONCTION CRITIQUE : DISTRIBUER ===
@@ -504,21 +556,32 @@ function requestDistribute() {
     const btn = document.getElementById('distribBtn');
     if(btn) btn.innerText = "LANCEMENT...";
 
-    socket.emit('start-game', { 
+    socket.emit('start-game', {
         club_id: user.club_id,
-        username: user.username 
+        salon_table_id: salonTableId,
+        username: user.username
     });
 }
 
 function standUp() {
-    socket.emit('stand-up', { club_id: user.club_id });
+    socket.emit('stand-up', { club_id: user.club_id, salon_table_id: salonTableId });
     myHand = []; hasFolded = false; isPassing = false;
     renderHand(); closeWinnerModal();
+    if (salonTableId) {
+        localStorage.removeItem('salon_table_id');
+        window.location.href = 'salon.html';
+    }
 }
 
 function leaveClub() {
-    socket.emit('stand-up', { club_id: user.club_id });
-    window.location.href = "index.html";
+    if (isObserver && salonTableId) {
+        socket.emit('leave-table', { salon_table_id: salonTableId });
+    } else {
+        socket.emit('stand-up', { club_id: user.club_id, salon_table_id: salonTableId });
+    }
+    localStorage.removeItem('salon_table_id');
+    localStorage.removeItem('salon_observer');
+    window.location.href = salonTableId ? 'salon.html' : 'index.html';
 }
 
 function showAnnouncement(text, duration = 2000) {
