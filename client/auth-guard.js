@@ -71,6 +71,22 @@
     }
 
     // ──────────────────────────────────────────────
+    // Garde bfcache (Back/Forward Cache)
+    // Chrome 96+ et Firefox 92+ ignorent Cache-Control: no-store pour le bfcache.
+    // Quand l'utilisateur fait "précédent" après logout, le navigateur restaure
+    // la page gelée sans ré-exécuter le JS. Ce listener pageshow se déclenche
+    // à chaque restauration et relit le localStorage — qui est vide après logout.
+    // ──────────────────────────────────────────────
+    window.addEventListener('pageshow', function (e) {
+        if (!e.persisted) return; // chargement normal — déjà géré par le guard au-dessus
+        if (!_isTokenValid(_readToken()) || !_readUser()) {
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.replace('index.html');
+        }
+    });
+
+    // ──────────────────────────────────────────────
     // API publique
     // ──────────────────────────────────────────────
     window.AuthGuard = {

@@ -1,3 +1,36 @@
+// ── Rediriger les utilisateurs déjà connectés ────────────────
+// Couvre deux cas :
+//   1. Chargement normal alors qu'une session est active (token valide en localStorage)
+//   2. Restauration bfcache après "précédent" depuis une page protégée
+(function redirectIfAuthenticated() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const b64     = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(b64));
+        if (payload.exp * 1000 <= Date.now()) return; // token expiré
+        const u = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!u) return;
+        const dest = u.role === 'superadmin' ? 'dashboard-pro.html' : 'salon.html';
+        window.location.replace(dest);
+    } catch {}
+})();
+
+window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return; // restauration bfcache uniquement
+    // Même logique : si l'utilisateur est toujours connecté, quitter la page login
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const b64     = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(b64));
+        if (payload.exp * 1000 <= Date.now()) return;
+        const u = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!u) return;
+        window.location.replace(u.role === 'superadmin' ? 'dashboard-pro.html' : 'salon.html');
+    } catch {}
+});
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 

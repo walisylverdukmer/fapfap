@@ -513,14 +513,16 @@ socket.on('card-rejected', (data) => {
 socket.on('join-refused', (data) => {
     alert(`Accès refusé : ${data.reason}`);
     console.warn('[ACCÈS] Rejoindre refusé:', data.reason);
-    window.location.href = salonTableId ? 'salon.html' : 'index.html';
+    window.location.replace(salonTableId ? 'salon.html' : 'index.html');
 });
 
 // Sprint 5 : déconnexion forcée (suspension en cours de partie ou check périodique)
 socket.on('force-disconnect', (data) => {
     alert(`Vous avez été déconnecté : ${data.reason}`);
     console.warn('[SÉCURITÉ] Force-disconnect:', data.reason);
-    window.location.href = 'index.html';
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace('index.html');
 });
 
 // --- 7. UTILITAIRES & ACTIONS JOUEUR ---
@@ -598,7 +600,7 @@ function leaveClub() {
     }
     localStorage.removeItem('salon_table_id');
     localStorage.removeItem('salon_observer');
-    window.location.href = salonTableId ? 'salon.html' : 'index.html';
+    window.location.replace(salonTableId ? 'salon.html' : 'index.html');
 }
 
 function showAnnouncement(text, duration = 2000) {
