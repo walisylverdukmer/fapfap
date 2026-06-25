@@ -1,4 +1,5 @@
-const db = require('../config/db');
+const db           = require('../config/db');
+const notifService = require('../services/notificationService');
 
 // POST /api/money/recharge — Créer une demande de recharge
 exports.createRecharge = async (req, res) => {
@@ -44,6 +45,21 @@ exports.createRecharge = async (req, res) => {
              VALUES ($1, 'recharge_request', 'recharge_requests', $2, $3::jsonb)`,
             [requester_id, requestId, JSON.stringify({ amount: parsedAmount, target_id: targetId })]
         );
+
+        // Notification temps réel aux admins (non-bloquant)
+        const io = req.app.get('io');
+        if (io) {
+            notifService.createAndBroadcast(db, io, {
+                type:      'demande_jetons',
+                audience:  'all_admin',
+                title:     'Demande de jetons',
+                body:      `${target.username} demande ${parsedAmount} FCFA`,
+                actorId:   requester_id,
+                subjectId: targetId,
+                clubId:    target.club_id,
+                metadata:  { request_id: requestId, amount: parsedAmount }
+            }).catch(e => console.error('[createRecharge] notif:', e.message));
+        }
 
         res.status(201).json({
             msg: "Demande de recharge envoyée. En attente de validation.",
@@ -191,6 +207,31 @@ exports.approveRecharge = async (req, res) => {
             })]
         );
 
+        // Notification + émission Socket.IO au joueur (non-bloquant)
+        const io = req.app.get('io');
+        const connectedSockets = req.app.get('connectedSockets');
+        if (io) {
+            // Notification persistée + diffusion admin
+            notifService.createAndBroadcast(db, io, {
+                type:      'recharge_validee',
+                audience:  'all_admin',
+                title:     'Recharge validée',
+                body:      `${request.target_name} a reçu ${amount} FCFA`,
+                actorId:   reviewer_id,
+                subjectId: request.target_id,
+                metadata:  { request_id: parseInt(id), amount, balance_after: tgtBalAfter }
+            }).catch(e => console.error('[approveRecharge] notif admin:', e.message));
+
+            // Émission directe au joueur concerné
+            const playerSocketId = connectedSockets?.get(request.target_id);
+            if (playerSocketId) {
+                io.to(playerSocketId).emit('tokens:approved', {
+                    new_balance: tgtBalAfter,
+                    amount
+                });
+            }
+        }
+
         res.json({
             msg: `Recharge de ${amount} FCFA approuvée pour ${request.target_name}.`,
             target: request.target_name,
@@ -223,6 +264,12 @@ exports.rejectRecharge = async (req, res) => {
             return res.status(400).json({ msg: `Demande déjà traitée (statut : ${rows[0].status}).` });
         }
 
+        // Récupérer target_id pour la notification joueur
+        const { rows: rRows } = await db.query(
+            'SELECT target_id FROM recharge_requests WHERE id=$1', [id]
+        );
+        const targetId = rRows[0]?.target_id;
+
         await db.query(
             "UPDATE recharge_requests SET status='rejected', reviewed_by=$1, reviewed_at=NOW(), note=COALESCE($2, note) WHERE id=$3",
             [reviewer_id, note || null, id]
@@ -233,6 +280,28 @@ exports.rejectRecharge = async (req, res) => {
             VALUES ($1, 'recharge_rejected', 'recharge_requests', $2, $3::jsonb)`,
             [reviewer_id, parseInt(id), JSON.stringify({ note: note || null })]
         );
+
+        // Notification + émission Socket.IO (non-bloquant)
+        const io = req.app.get('io');
+        const connectedSockets = req.app.get('connectedSockets');
+        if (io && targetId) {
+            notifService.createAndBroadcast(db, io, {
+                type:      'recharge_rejetee',
+                audience:  'all_admin',
+                title:     'Recharge refusée',
+                body:      `Demande #${id} refusée`,
+                actorId:   reviewer_id,
+                subjectId: targetId,
+                metadata:  { request_id: parseInt(id), note: note || null }
+            }).catch(e => console.error('[rejectRecharge] notif admin:', e.message));
+
+            const playerSocketId = connectedSockets?.get(targetId);
+            if (playerSocketId) {
+                io.to(playerSocketId).emit('tokens:rejected', {
+                    reason: note || 'Demande refusée par votre Katika.'
+                });
+            }
+        }
 
         res.json({ msg: "Demande de recharge refusée." });
     } catch (error) {

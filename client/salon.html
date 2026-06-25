@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-store">
-    <script src="auth-guard.js"></script>
+    <!-- Pas de auth-guard : salon accessible aux visiteurs anonymes -->
     <title>FAP FAP — Salon de jeu</title>
     <link rel="stylesheet" href="style.css">
     <style>
@@ -18,35 +18,42 @@
             border-bottom: 2px solid var(--gold);
             flex-shrink: 0;
         }
-        .salon-header h1 {
-            color: var(--gold);
-            font-size: 1.3rem;
-            margin: 0;
-            letter-spacing: 2px;
-        }
-        .salon-header .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            font-size: 0.9rem;
-        }
+        .salon-header h1 { color: var(--gold); font-size: 1.3rem; margin: 0; letter-spacing: 2px; }
+        .salon-header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9rem; }
         .salon-header .user-info span { color: #ccc; }
         .salon-header .user-info strong { color: var(--gold); }
 
-        .salon-content {
-            padding: 20px;
-            max-width: 1100px;
-            margin: 0 auto;
-            width: 100%;
-            box-sizing: border-box;
-        }
+        .salon-content { padding: 20px; max-width: 1100px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .salon-subtitle { text-align: center; color: #888; margin-bottom: 24px; font-size: 0.9rem; }
 
-        .salon-subtitle {
-            text-align: center;
-            color: #888;
-            margin-bottom: 24px;
-            font-size: 0.9rem;
+        /* Bannière visiteur */
+        #visitor-banner {
+            display: none;
+            background: linear-gradient(135deg, #1a1a00, #2a2200);
+            border: 1px solid var(--gold);
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
         }
+        #visitor-banner p { margin: 0; color: #ccc; font-size: 0.88rem; }
+        #visitor-banner strong { color: var(--gold); }
+        #btn-want-play {
+            background: var(--gold);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 22px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        #btn-want-play:hover { filter: brightness(1.15); }
 
         /* Grille des tables */
         .tables-grid {
@@ -55,7 +62,6 @@
             gap: 16px;
             margin-bottom: 30px;
         }
-
         .table-card {
             background: #1e1e1e;
             border: 1px solid #333;
@@ -66,231 +72,115 @@
         }
         .table-card:hover { border-color: var(--gold); }
         .table-card.status-playing { border-color: #e74c3c; }
-        .table-card.status-open { border-color: #2ecc71; }
+        .table-card.status-open   { border-color: #2ecc71; }
 
-        .table-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-        .table-card-name {
-            font-size: 1.05rem;
-            font-weight: bold;
-            color: var(--gold);
-        }
-        .table-status-badge {
-            font-size: 0.72rem;
-            padding: 3px 8px;
-            border-radius: 20px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
+        .table-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .table-card-name { font-size: 1.05rem; font-weight: bold; color: var(--gold); }
+        .table-status-badge { font-size: 0.72rem; padding: 3px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; }
         .badge-open    { background: #1a4731; color: #2ecc71; }
         .badge-playing { background: #4a1010; color: #e74c3c; }
 
-        .table-card-info {
-            font-size: 0.85rem;
-            color: #aaa;
-            margin-bottom: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
+        .table-card-info { font-size: 0.85rem; color: #aaa; margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
         .table-card-info span strong { color: #fff; }
 
-        .seats-bar {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 14px;
-        }
-        .seat-dot {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            border: 2px solid #444;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.6rem;
-        }
+        .seats-bar { display: flex; gap: 5px; margin-bottom: 14px; }
+        .seat-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #444; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; }
         .seat-dot.taken { background: var(--gold); border-color: var(--gold); }
         .seat-dot.free  { background: transparent; }
 
-        .table-card-actions {
-            display: flex;
-            gap: 8px;
-        }
+        .table-card-actions { display: flex; gap: 8px; }
         .btn-sit-table {
-            flex: 1;
-            background: var(--gold);
-            color: #000;
-            border: none;
-            border-radius: 6px;
-            padding: 9px 0;
-            font-weight: bold;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: background 0.2s;
+            flex: 1; background: var(--gold); color: #000; border: none;
+            border-radius: 6px; padding: 9px 0; font-weight: bold;
+            font-size: 0.85rem; cursor: pointer; transition: background 0.2s;
         }
         .btn-sit-table:hover { background: var(--gold-dark); }
-        .btn-sit-table:disabled {
-            background: #444;
-            color: #888;
-            cursor: not-allowed;
-        }
+        .btn-sit-table:disabled { background: #444; color: #888; cursor: not-allowed; }
         .btn-observe {
-            background: transparent;
-            border: 1px solid #555;
-            color: #aaa;
-            border-radius: 6px;
-            padding: 9px 14px;
-            font-size: 0.82rem;
-            cursor: pointer;
-            transition: border-color 0.2s, color 0.2s;
+            background: transparent; border: 1px solid #555; color: #aaa;
+            border-radius: 6px; padding: 9px 14px; font-size: 0.82rem;
+            cursor: pointer; transition: border-color 0.2s, color 0.2s;
         }
         .btn-observe:hover { border-color: #aaa; color: #fff; }
 
-        .players-list {
-            font-size: 0.78rem;
-            color: #777;
-            margin-bottom: 8px;
-        }
-        .players-list .player-chip {
-            display: inline-block;
-            background: #2a2a2a;
-            border-radius: 10px;
-            padding: 2px 8px;
-            margin: 2px;
-            color: #ccc;
-        }
+        .players-list { font-size: 0.78rem; color: #777; margin-bottom: 8px; }
+        .players-list .player-chip { display: inline-block; background: #2a2a2a; border-radius: 10px; padding: 2px 8px; margin: 2px; color: #ccc; }
 
         /* Panel admin */
-        .admin-panel {
-            display: none;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid var(--gold-dark);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 24px;
-        }
+        .admin-panel { display: none; background: rgba(0,0,0,0.4); border: 1px solid var(--gold-dark); border-radius: 10px; padding: 20px; margin-bottom: 24px; }
         .admin-panel.visible { display: block; }
         .admin-panel h3 { color: var(--gold); margin-top: 0; font-size: 1rem; }
-        .admin-panel .form-row {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: flex-end;
-        }
-        .admin-panel input, .admin-panel select {
-            background: #222;
-            border: 1px solid #444;
-            color: white;
-            border-radius: 6px;
-            padding: 9px 12px;
-            font-size: 0.85rem;
-            flex: 1;
-            min-width: 120px;
-        }
-        .admin-panel button {
-            background: var(--gold);
-            color: #000;
-            border: none;
-            border-radius: 6px;
-            padding: 9px 20px;
-            font-weight: bold;
-            cursor: pointer;
-            white-space: nowrap;
-        }
+        .admin-panel .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .admin-panel input, .admin-panel select { background: #222; border: 1px solid #444; color: white; border-radius: 6px; padding: 9px 12px; font-size: 0.85rem; flex: 1; min-width: 120px; }
+        .admin-panel button { background: var(--gold); color: #000; border: none; border-radius: 6px; padding: 9px 20px; font-weight: bold; cursor: pointer; white-space: nowrap; }
         .admin-panel button:hover { background: var(--gold-dark); }
 
-        /* Modal de confirmation */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.75);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
+        /* Modals communs */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
         .modal-overlay.open { display: flex; }
-        .modal-box {
-            background: #1e1e1e;
-            border: 1px solid var(--gold);
-            border-radius: 14px;
-            padding: 30px;
-            max-width: 380px;
-            width: 90%;
-            text-align: center;
-        }
-        .modal-box h2 { color: var(--gold); margin-top: 0; font-size: 1.2rem; }
-        .modal-box p  { color: #ccc; font-size: 0.9rem; margin-bottom: 20px; }
-        .modal-box .modal-actions { display: flex; gap: 10px; justify-content: center; }
-        .modal-box .btn-confirm {
-            background: var(--gold);
-            color: #000;
-            border: none;
-            border-radius: 8px;
-            padding: 11px 24px;
-            font-weight: bold;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
-        .modal-box .btn-cancel {
-            background: transparent;
-            border: 1px solid #555;
-            color: #aaa;
-            border-radius: 8px;
-            padding: 11px 24px;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
+        .modal-box { background: #1e1e1e; border: 1px solid var(--gold); border-radius: 14px; padding: 28px; max-width: 400px; width: 92%; }
+        .modal-box h2 { color: var(--gold); margin-top: 0; font-size: 1.15rem; }
+        .modal-box p  { color: #ccc; font-size: 0.88rem; margin-bottom: 16px; }
+        .modal-box .modal-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
+        .modal-box .btn-confirm { background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 11px 24px; font-weight: bold; font-size: 0.9rem; cursor: pointer; flex: 1; }
+        .modal-box .btn-cancel  { background: transparent; border: 1px solid #555; color: #aaa; border-radius: 8px; padding: 11px 24px; font-size: 0.9rem; cursor: pointer; }
         .modal-box .btn-cancel:hover { border-color: #aaa; color: #fff; }
 
-        /* Connexion état */
-        #connection-status {
-            position: fixed;
-            bottom: 16px;
-            right: 16px;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 0.78rem;
-            font-weight: bold;
-            z-index: 500;
+        /* Formulaire dans modals */
+        .modal-form-group { margin-bottom: 14px; }
+        .modal-form-group label { display: block; font-size: 0.72rem; color: #888; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.5px; }
+        .modal-form-group input, .modal-form-group select {
+            width: 100%; padding: 10px 12px; background: #141414; border: 1px solid #444;
+            color: #fff; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box;
         }
+        .modal-form-group input:focus, .modal-form-group select:focus { border-color: var(--gold); outline: none; }
+        .modal-error { color: #e74c3c; font-size: 0.82rem; margin-top: 10px; min-height: 18px; }
+
+        /* Tokens montants */
+        .token-amounts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+        .token-btn {
+            background: #141414; border: 1px solid #444; color: #ccc;
+            border-radius: 8px; padding: 12px; font-size: 0.9rem;
+            cursor: pointer; text-align: center; transition: all 0.15s;
+        }
+        .token-btn:hover, .token-btn.selected { background: #2a2200; border-color: var(--gold); color: var(--gold); font-weight: bold; }
+
+        /* Statut connexion */
+        #connection-status { position: fixed; bottom: 16px; right: 16px; padding: 6px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: bold; z-index: 500; }
         #connection-status.connected    { background: #1a4731; color: #2ecc71; }
         #connection-status.disconnected { background: #4a1010; color: #e74c3c; }
 
-        #loading-msg {
-            text-align: center;
-            color: #888;
-            padding: 40px;
-        }
-        .btn-logout {
-            background: transparent;
-            border: 1px solid #555;
-            color: #aaa;
-            border-radius: 6px;
-            padding: 6px 14px;
-            font-size: 0.8rem;
-            cursor: pointer;
-        }
+        #loading-msg { text-align: center; color: #888; padding: 40px; }
+        .btn-logout { background: transparent; border: 1px solid #555; color: #aaa; border-radius: 6px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; }
         .btn-logout:hover { border-color: #e74c3c; color: #e74c3c; }
+        #wallet-display { color: var(--gold); font-weight: bold; }
+
+        /* Toast notification */
+        #toast {
+            position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+            background: #1e3a1e; border: 1px solid #2ecc71; color: #2ecc71;
+            padding: 12px 22px; border-radius: 10px; font-size: 0.88rem;
+            z-index: 2000; display: none; max-width: 320px; text-align: center;
+        }
+        #toast.error { background: #3a1e1e; border-color: #e74c3c; color: #e74c3c; }
     </style>
 </head>
 <body>
     <!-- Header -->
     <div class="salon-header">
         <h1>FAP FAP — SALON</h1>
-        <div class="user-info">
-            <span>Connecté : <strong id="header-username">...</strong></span>
-            <span id="rs-badge-slot"></span>
-            <button class="btn-logout" onclick="logout()">Déconnexion</button>
+        <div class="user-info" id="header-user-area">
+            <!-- Rempli dynamiquement par salon.js -->
         </div>
     </div>
 
     <div class="salon-content">
+        <!-- Bannière visiteur -->
+        <div id="visitor-banner">
+            <p>Vous êtes en mode <strong>Observateur</strong>. Vous pouvez regarder les tables et observer les parties.</p>
+            <button id="btn-want-play" onclick="openModalRegister()">Je veux jouer</button>
+        </div>
+
         <p class="salon-subtitle" id="salon-subtitle">Choisissez une table pour jouer.</p>
 
         <!-- Panel admin (superadmin / katika uniquement) -->
@@ -314,11 +204,14 @@
         <div class="tables-grid" id="tables-grid" style="display:none"></div>
     </div>
 
-    <!-- Modal : s'asseoir -->
+    <!-- ═══════════════════════════════════════════════════════════
+         MODAL : S'ASSEOIR
+    ═══════════════════════════════════════════════════════════ -->
     <div class="modal-overlay" id="modal-sit">
         <div class="modal-box">
             <h2 id="modal-sit-title">S'asseoir à la table</h2>
-            <p id="modal-sit-body">Mise minimale : <strong id="modal-sit-bet">—</strong> FCFA</p>
+            <p>Mise minimale : <strong id="modal-sit-bet">—</strong> FCFA<br>
+               Votre solde : <strong id="modal-sit-wallet">—</strong> FCFA</p>
             <div class="modal-actions">
                 <button class="btn-confirm" onclick="confirmSit()">S'asseoir</button>
                 <button class="btn-cancel"  onclick="closeModals()">Annuler</button>
@@ -326,7 +219,9 @@
         </div>
     </div>
 
-    <!-- Modal : observer -->
+    <!-- ═══════════════════════════════════════════════════════════
+         MODAL : OBSERVER
+    ═══════════════════════════════════════════════════════════ -->
     <div class="modal-overlay" id="modal-observe">
         <div class="modal-box">
             <h2 id="modal-obs-title">Observer la table</h2>
@@ -337,6 +232,102 @@
             </div>
         </div>
     </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         MODAL : INSCRIPTION
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="modal-register">
+        <div class="modal-box">
+            <h2>Créer mon compte</h2>
+            <p>Rejoignez FAP FAP pour jouer et miser.</p>
+
+            <div class="modal-form-group">
+                <label>Téléphone</label>
+                <input type="tel" id="reg-phone" placeholder="Ex: 0700123456" maxlength="15">
+            </div>
+            <div class="modal-form-group">
+                <label>Sobriquet (visible en jeu)</label>
+                <input type="text" id="reg-username" placeholder="Ex: KoffiPlay" maxlength="30">
+            </div>
+            <div class="modal-form-group">
+                <label>Mot de passe</label>
+                <input type="password" id="reg-password" placeholder="••••••••" minlength="6">
+            </div>
+            <div class="modal-form-group">
+                <label>Confirmer le mot de passe</label>
+                <input type="password" id="reg-password2" placeholder="••••••••">
+            </div>
+            <div class="modal-error" id="reg-error"></div>
+
+            <div class="modal-actions">
+                <button class="btn-confirm" onclick="submitRegister()">Créer mon compte</button>
+                <button class="btn-cancel"  onclick="closeModals()">Annuler</button>
+            </div>
+            <p style="text-align:center; margin-top:14px; font-size:0.8rem; color:#666;">
+                Déjà un compte ? <a href="#" onclick="openModalLogin()" style="color:var(--gold);">Se connecter</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         MODAL : CONNEXION (visiteur avec compte existant)
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="modal-login">
+        <div class="modal-box">
+            <h2>Se connecter</h2>
+            <div class="modal-form-group">
+                <label>Téléphone</label>
+                <input type="tel" id="login-phone" placeholder="0700123456">
+            </div>
+            <div class="modal-form-group">
+                <label>Mot de passe</label>
+                <input type="password" id="login-password" placeholder="••••••••">
+            </div>
+            <div class="modal-error" id="login-error"></div>
+            <div class="modal-actions">
+                <button class="btn-confirm" onclick="submitLogin()">Se connecter</button>
+                <button class="btn-cancel"  onclick="closeModals()">Annuler</button>
+            </div>
+            <p style="text-align:center; margin-top:14px; font-size:0.8rem; color:#666;">
+                Pas de compte ? <a href="#" onclick="openModalRegister()" style="color:var(--gold);">S'inscrire</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         MODAL : DEMANDE DE JETONS
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="modal-tokens">
+        <div class="modal-box">
+            <h2>Demander des jetons</h2>
+            <p>Choisissez un montant. Votre Katika validera la recharge.</p>
+
+            <div class="token-amounts">
+                <button class="token-btn" onclick="selectAmount(1000,  this)">1 000 FCFA</button>
+                <button class="token-btn" onclick="selectAmount(2500,  this)">2 500 FCFA</button>
+                <button class="token-btn" onclick="selectAmount(5000,  this)">5 000 FCFA</button>
+                <button class="token-btn" onclick="selectAmount(10000, this)">10 000 FCFA</button>
+            </div>
+
+            <div class="modal-form-group">
+                <label>Montant personnalisé (FCFA)</label>
+                <input type="number" id="tokens-custom" placeholder="Ex: 3000" min="500" oninput="clearAmountSelection()">
+            </div>
+            <div class="modal-form-group">
+                <label>Note (optionnel — ex: N° de transfert Orange Money)</label>
+                <input type="text" id="tokens-note" placeholder="Ex: OM #123456" maxlength="100">
+            </div>
+            <div class="modal-error" id="tokens-error"></div>
+
+            <div class="modal-actions">
+                <button class="btn-confirm" onclick="submitTokenRequest()">Envoyer la demande</button>
+                <button class="btn-cancel"  onclick="closeModalsAndReload()">Plus tard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
 
     <!-- Statut connexion -->
     <div id="connection-status" class="disconnected">Déconnecté</div>

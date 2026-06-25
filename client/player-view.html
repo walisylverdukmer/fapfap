@@ -2,20 +2,270 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Mon Portefeuille - Fap Fap</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store">
+    <script src="auth-guard.js"></script>
+    <title>Mon Portefeuille — FAP FAP</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        body { background: #0a0a0a; font-family: 'Segoe UI', sans-serif; color: #fff; margin: 0; padding: 20px; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 14px; border-bottom: 1px solid #333; }
+        .page-header h1 { margin: 0; color: var(--gold, #d4af37); font-size: 1.2rem; letter-spacing: 1px; }
+        .btn-back { background: transparent; border: 1px solid #444; color: #aaa; border-radius: 6px; padding: 7px 14px; font-size: 0.8rem; cursor: pointer; text-decoration: none; }
+        .btn-back:hover { border-color: #aaa; color: #fff; }
+
+        .card { background: #161616; border: 1px solid #2a2a2a; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+
+        /* Wallet */
+        .wallet-card { text-align: center; border-top: 3px solid var(--gold, #d4af37); }
+        .wallet-name { font-size: 1rem; color: #aaa; margin-bottom: 6px; }
+        .wallet-amount { font-size: 2.8rem; color: var(--gold, #d4af37); font-weight: bold; line-height: 1.1; }
+        .wallet-sub { font-size: 0.82rem; color: #555; margin-top: 6px; }
+        #wallet-status-badge {
+            display: inline-block; margin-top: 12px; padding: 5px 14px;
+            border-radius: 20px; font-size: 0.8rem; font-weight: bold;
+        }
+        .status-active   { background: #1a4731; color: #2ecc71; }
+        .status-pending  { background: #2a2200; color: #f39c12; }
+        .status-no-funds { background: #1a1a1a; color: #666; }
+
+        /* Demande de jetons */
+        .card h3 { margin-top: 0; color: var(--gold, #d4af37); font-size: 0.95rem; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 0.72rem; color: #888; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.5px; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 10px 12px; background: #0e0e0e; border: 1px solid #333;
+            color: #fff; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;
+        }
+        .form-group input:focus { border-color: var(--gold, #d4af37); outline: none; }
+
+        .amounts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+        .amount-btn {
+            background: #0e0e0e; border: 1px solid #333; color: #aaa;
+            border-radius: 8px; padding: 12px; font-size: 0.88rem;
+            cursor: pointer; text-align: center; transition: all 0.15s;
+        }
+        .amount-btn:hover, .amount-btn.selected { background: #2a2200; border-color: var(--gold, #d4af37); color: var(--gold, #d4af37); font-weight: bold; }
+
+        .btn-primary { width: 100%; background: var(--gold, #d4af37); color: #000; border: none; border-radius: 8px; padding: 13px; font-weight: bold; font-size: 0.9rem; cursor: pointer; transition: filter 0.2s; }
+        .btn-primary:hover { filter: brightness(1.15); }
+        .btn-primary:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+        .msg-error   { color: #e74c3c; font-size: 0.82rem; margin-top: 8px; }
+        .msg-success { color: #2ecc71; font-size: 0.85rem; margin-top: 8px; text-align: center; }
+
+        /* Historique demandes */
+        .recharge-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #1a1a1a; }
+        .recharge-item:last-child { border-bottom: none; }
+        .recharge-amount { font-weight: bold; color: var(--gold, #d4af37); }
+        .badge-pending  { background: #2a2200; color: #f39c12; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: bold; }
+        .badge-approved { background: #1a4731; color: #2ecc71; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: bold; }
+        .badge-rejected { background: #3a1010; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: bold; }
+
+        /* Toast */
+        #toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #1e3a1e; border: 1px solid #2ecc71; color: #2ecc71;
+            padding: 11px 20px; border-radius: 10px; font-size: 0.85rem;
+            z-index: 1000; display: none; max-width: 320px; text-align: center;
+        }
+        #toast.error { background: #3a1e1e; border-color: #e74c3c; color: #e74c3c; }
+    </style>
 </head>
 <body>
-    <div class="card" style="text-align: center;">
-        <h2 id="playerName">Joueur</h2>
-        <div style="font-size: 3rem; color: var(--green);" id="playerBalance">0 FCFA</div>
-        <p>ID Club: <span id="clubId">--</span></p>
+    <div class="page-header">
+        <h1>♠ Mon Portefeuille</h1>
+        <a href="salon.html" class="btn-back">← Retour au salon</a>
     </div>
 
-    <div class="card">
-        <h3>Demander une Recharge</h3>
-        <input type="number" id="rechargeAmount" placeholder="Montant">
-        <button onclick="requestMoney()">Envoyer au Katika</button>
+    <!-- Solde -->
+    <div class="card wallet-card">
+        <div class="wallet-name" id="player-name">Chargement…</div>
+        <div class="wallet-amount" id="player-balance">— FCFA</div>
+        <div class="wallet-sub">Solde disponible</div>
+        <div id="wallet-status-badge"></div>
     </div>
+
+    <!-- Demande de jetons -->
+    <div class="card">
+        <h3>Demander des jetons</h3>
+        <p style="color:#888;font-size:0.82rem;margin-top:0;">Choisissez un montant. Votre Katika validera la recharge.</p>
+
+        <div class="amounts-grid">
+            <button class="amount-btn" onclick="selectAmount(1000,  this)">1 000 FCFA</button>
+            <button class="amount-btn" onclick="selectAmount(2500,  this)">2 500 FCFA</button>
+            <button class="amount-btn" onclick="selectAmount(5000,  this)">5 000 FCFA</button>
+            <button class="amount-btn" onclick="selectAmount(10000, this)">10 000 FCFA</button>
+        </div>
+
+        <div class="form-group">
+            <label>Montant personnalisé (FCFA)</label>
+            <input type="number" id="custom-amount" placeholder="Ex: 3000" min="500" oninput="clearSelection()">
+        </div>
+        <div class="form-group">
+            <label>Note (optionnel — numéro de transfert OM, MTN…)</label>
+            <input type="text" id="recharge-note" placeholder="Ex: OM #123456" maxlength="100">
+        </div>
+
+        <div class="msg-error"   id="recharge-error"></div>
+        <div class="msg-success" id="recharge-success" style="display:none;"></div>
+
+        <button class="btn-primary" id="btn-send" onclick="submitRequest()">Envoyer la demande</button>
+    </div>
+
+    <!-- Historique des demandes -->
+    <div class="card">
+        <h3>Mes demandes</h3>
+        <div id="recharge-history">
+            <div style="color:#555;text-align:center;padding:16px;">Chargement…</div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script src="config.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        if (!AuthGuard.require([])) throw 0;
+        const user  = AuthGuard.getUser();
+        const token = AuthGuard.getToken();
+        let selectedAmount = 0;
+        let myWallet = parseFloat(user.wallet) || 0;
+
+        // ── Init ────────────────────────────────────
+        document.getElementById('player-name').textContent = user.username;
+        renderWallet();
+        loadHistory();
+
+        // ── Socket.IO — notification tokens ─────────
+        const socket = io(BACKEND_URL);
+        socket.on('connect', () => socket.emit('authenticate', token));
+
+        socket.on('tokens:approved', ({ new_balance, amount }) => {
+            myWallet = new_balance;
+            renderWallet();
+            const u = JSON.parse(localStorage.getItem('user') || '{}');
+            u.wallet = new_balance;
+            localStorage.setItem('user', JSON.stringify(u));
+            showToast(`Jetons validés ! +${parseFloat(amount).toLocaleString()} FCFA`);
+            loadHistory();
+        });
+
+        socket.on('tokens:rejected', ({ reason }) => {
+            showToast(`Demande refusée : ${reason}`, true);
+            loadHistory();
+        });
+
+        // ── Wallet display ───────────────────────────
+        function renderWallet() {
+            document.getElementById('player-balance').textContent = myWallet.toLocaleString() + ' FCFA';
+            const badge  = document.getElementById('wallet-status-badge');
+            if (myWallet > 0) {
+                badge.textContent = '● Joueur actif';
+                badge.className   = 'status-active';
+            } else {
+                badge.textContent = '⏳ En attente de jetons';
+                badge.className   = 'status-pending';
+            }
+        }
+
+        // ── Demande de jetons ────────────────────────
+        function selectAmount(amount, btn) {
+            selectedAmount = amount;
+            document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            document.getElementById('custom-amount').value = '';
+        }
+
+        function clearSelection() {
+            selectedAmount = 0;
+            document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+        }
+
+        async function submitRequest() {
+            const custom = parseInt(document.getElementById('custom-amount').value) || 0;
+            const amount = custom || selectedAmount;
+            const note   = document.getElementById('recharge-note').value.trim();
+
+            document.getElementById('recharge-error').textContent   = '';
+            document.getElementById('recharge-success').style.display = 'none';
+
+            if (!amount || amount < 500) {
+                document.getElementById('recharge-error').textContent = 'Montant minimum : 500 FCFA.';
+                return;
+            }
+
+            const btn = document.getElementById('btn-send');
+            btn.disabled = true;
+            btn.textContent = 'Envoi…';
+
+            try {
+                const r = await fetch(BACKEND_URL + '/api/money/recharge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ amount, note: note || undefined })
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    document.getElementById('recharge-error').textContent = data.msg || 'Erreur.';
+                } else {
+                    document.getElementById('recharge-success').style.display = 'block';
+                    document.getElementById('recharge-success').textContent =
+                        'Demande envoyée ! Votre Katika va valider la recharge bientôt.';
+                    document.getElementById('custom-amount').value = '';
+                    document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+                    selectedAmount = 0;
+                    loadHistory();
+                }
+            } catch {
+                document.getElementById('recharge-error').textContent = 'Erreur réseau.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Envoyer la demande';
+            }
+        }
+
+        // ── Historique ───────────────────────────────
+        async function loadHistory() {
+            const container = document.getElementById('recharge-history');
+            try {
+                const r = await fetch(BACKEND_URL + '/api/money/recharges', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!r.ok) return;
+                const list = await r.json();
+                if (!list || list.length === 0) {
+                    container.innerHTML = '<div style="color:#555;text-align:center;padding:16px;">Aucune demande</div>';
+                    return;
+                }
+                const badgeMap = { pending: 'badge-pending', approved: 'badge-approved', rejected: 'badge-rejected' };
+                const labelMap = { pending: 'En attente', approved: 'Validée', rejected: 'Refusée' };
+                container.innerHTML = list.map(rq => `
+                    <div class="recharge-item">
+                        <div>
+                            <div class="recharge-amount">${parseFloat(rq.amount).toLocaleString()} FCFA</div>
+                            <div style="font-size:0.75rem;color:#666;margin-top:2px;">
+                                ${new Date(rq.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                                ${rq.note ? ` · ${rq.note}` : ''}
+                            </div>
+                        </div>
+                        <span class="${badgeMap[rq.status]}">${labelMap[rq.status]}</span>
+                    </div>`).join('');
+            } catch {
+                container.innerHTML = '<div style="color:#e74c3c;text-align:center;">Erreur chargement.</div>';
+            }
+        }
+
+        // ── Toast ────────────────────────────────────
+        function showToast(msg, isError = false) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className   = isError ? 'error' : '';
+            t.style.display = 'block';
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 5000);
+        }
+    </script>
 </body>
 </html>

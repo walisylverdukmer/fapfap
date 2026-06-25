@@ -1,6 +1,7 @@
-const db     = require('../config/db');
-const bcrypt = require('bcryptjs');
-const jwt    = require('jsonwebtoken');
+const db           = require('../config/db');
+const bcrypt       = require('bcryptjs');
+const jwt          = require('jsonwebtoken');
+const notifService = require('../services/notificationService');
 
 // Sprint 5 — Rate limiting login (sans dépendance externe)
 // Stockage en mémoire : ip → { count, firstAttempt }
@@ -183,6 +184,22 @@ exports.registerOrLogin = async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
+
+        // Notification temps réel aux admins (non-bloquant)
+        const io = req.app.get('io');
+        if (io) {
+            notifService.createAndBroadcast(db, io, {
+                type:      'nouvelle_inscription',
+                audience:  'all_admin',
+                title:     'Nouvelle inscription',
+                body:      `${user.username} vient de créer un compte`,
+                actorId:   user.id,
+                subjectId: user.id,
+                clubId:    user.club_id,
+                metadata:  { phone }
+            }).catch(e => console.error('[registerOrLogin] notif:', e.message));
+        }
+
         return res.status(201).json({
             token,
             user: { id: user.id, username: user.username, role: user.role, phone: user.phone, wallet: parseFloat(user.wallet), club_id: user.club_id },

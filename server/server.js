@@ -11,12 +11,14 @@ const http       = require('http');
 const path       = require('path');
 const { Server } = require('socket.io');
 const cors       = require('cors');
+const jwt        = require('jsonwebtoken');
 const db         = require('./config/db');
 
-const moneyRoutes  = require('./routes/moneyRoutes');
-const authRoutes   = require('./routes/authRoutes');
-const adminRoutes  = require('./routes/adminRoutes');
-const salonRoutes  = require('./routes/salonRoutes');
+const moneyRoutes         = require('./routes/moneyRoutes');
+const authRoutes          = require('./routes/authRoutes');
+const adminRoutes         = require('./routes/adminRoutes');
+const salonRoutes         = require('./routes/salonRoutes');
+const notificationRoutes  = require('./routes/notificationRoutes');
 
 // Sprint 5 — CORS whitelist (remplace origin: "*")
 // Render injecte RENDER_EXTERNAL_URL automatiquement → auto-ajouté à la whitelist
@@ -41,10 +43,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
-app.use('/api/money', moneyRoutes);
-app.use('/api/auth',  authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/salon', salonRoutes);
+app.use('/api/money',         moneyRoutes);
+app.use('/api/auth',          authRoutes);
+app.use('/api/admin',         adminRoutes);
+app.use('/api/salon',         salonRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Empêche la mise en cache des pages HTML protégées (fix retour arrière après logout)
 app.use((req, res, next) => {
@@ -494,6 +497,33 @@ async function broadcastSalonState() {
 
 io.on('connection', (socket) => {
     console.log('📱 Connecté :', socket.id);
+
+    // --- 0. AUTHENTIFICATION POST-CONNEXION ---
+    // Permet aux admins/joueurs connectés de s'identifier sans bloquer les visiteurs.
+    // Les visiteurs anonymes ignorent cet événement et restent en mode lecture seule.
+    socket.on('authenticate', (token) => {
+        if (!token) return;
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            socket.data.user = decoded;
+            socket.userId    = decoded.id;
+            socket.userRole  = decoded.role;
+            connectedSockets.set(decoded.id, socket.id);
+
+            if (['superadmin', 'katika'].includes(decoded.role)) {
+                socket.join('admin_room');
+            }
+            if (decoded.role === 'superadmin') {
+                socket.join('wali_room');
+            }
+            if (decoded.role === 'katika' && decoded.club_id) {
+                socket.join(`club_room_${decoded.club_id}`);
+            }
+            socket.emit('authenticated', { role: decoded.role, id: decoded.id });
+        } catch {
+            socket.emit('auth-error', { reason: 'Token invalide.' });
+        }
+    });
 
     // --- 1. REJOINDRE ---
     socket.on('join-table', async (data) => {
@@ -1062,53 +1092,63 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Joueur observe une table (sans siège)
+    // Joueur ou visiteur anonyme observe une table (sans siège)
     socket.on('observe-table', async (data) => {
         if (!data?.salon_table_id) return;
         const salonId = parseInt(data.salon_table_id, 10);
         const tableId = `salon_${salonId}`;
 
-        // Résoudre userId via socket ou via username fourni (nouveau socket)
+        // Résoudre userId si un username est fourni (joueur identifié)
         if (!socket.userId && data.username) {
             try {
                 const { rows } = await db.query(
                     'SELECT id, status FROM users WHERE username=$1', [data.username]
                 );
-                if (!rows.length || rows[0].status !== 'active') {
-                    socket.emit('join-refused', { reason: 'Compte introuvable ou suspendu.' });
-                    return;
+                if (rows.length && rows[0].status === 'active') {
+                    socket.userId = rows[0].id;
+                    connectedSockets.set(rows[0].id, socket.id);
                 }
-                socket.userId = rows[0].id;
-                connectedSockets.set(rows[0].id, socket.id);
             } catch (err) {
                 console.error('[observe-table] user lookup:', err.message);
-                return;
             }
         }
-        if (!socket.userId) return;
 
-        try {
-            await db.query(
-                `INSERT INTO table_observers (table_id, user_id)
-                 VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                [salonId, socket.userId]
-            );
-            socket.join(tableId);
-            socket.salonObserving = salonId;
-
-            // Envoyer l'état actuel de la table à l'observateur
-            const table = tables[tableId];
-            if (table) {
-                socket.emit('player-list-update', table.players);
-                if (table.dealerIndex !== undefined) {
-                    const dealer = table.players[table.dealerIndex];
-                    if (dealer) socket.emit('update-dealer', { dealerId: dealer.id });
-                }
+        // Enregistrer en DB uniquement les joueurs identifiés
+        if (socket.userId) {
+            try {
+                await db.query(
+                    `INSERT INTO table_observers (table_id, user_id)
+                     VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                    [salonId, socket.userId]
+                );
+            } catch (err) {
+                console.error('[observe-table] DB insert:', err.message);
             }
-            broadcastSalonState();
-        } catch (err) {
-            console.error('[observe-table]', err.message);
         }
+
+        // Visiteurs anonymes et joueurs identifiés rejoignent la salle
+        socket.join(tableId);
+        socket.salonObserving = salonId;
+
+        // Envoyer l'état actuel de la table — sans les mains privées
+        const table = tables[tableId];
+        if (table) {
+            const publicPlayers = table.players.map(p => ({
+                id:       p.id,
+                username: p.username,
+                avatar:   p.avatar,
+                wallet:   p.wallet,
+                isInHand: p.isInHand,
+                isPassing: p.isPassing
+                // hand non transmise : lecture seule pour l'observateur
+            }));
+            socket.emit('player-list-update', publicPlayers);
+            if (table.dealerIndex !== undefined) {
+                const dealer = table.players[table.dealerIndex];
+                if (dealer) socket.emit('update-dealer', { dealerId: dealer.id });
+            }
+        }
+        if (socket.userId) broadcastSalonState();
     });
 
     // Joueur quitte sa table (se lève ou arrête d'observer)
