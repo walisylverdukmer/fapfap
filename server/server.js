@@ -1239,6 +1239,13 @@ io.on('connection', (socket) => {
             }
 
             const table = tables[tableId];
+
+            // BUG-F fix : bloquer si une partie est en cours (vérification RAM)
+            if (table && table.status === 'PLAYING') {
+                socket.emit('join-refused', { reason: 'Une partie est en cours. Attendez la fin de la manche.' });
+                return;
+            }
+
             if (!table.players.find(p => p.username === data.username)) {
                 table.players.push({
                     id:               socket.id,

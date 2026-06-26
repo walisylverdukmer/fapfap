@@ -145,26 +145,29 @@ socket.on('history-update', (data) => {
 socket.on('player-list-update', (players) => {
     console.log("👥 Liste joueurs mise à jour :", players.length);
 
+    playerMap = {};
+    // BUG-H fix : calculé avant le reset pour savoir si on est déjà assis
+    const alreadySeated = players.some(p => p.id === socket.id);
+
     // Etape A : Reset complet des slots pour éviter les doublons
     for(let i=1; i<=4; i++) {
         const isMeSlot = (i === 1);
         const nameEl = document.getElementById(isMeSlot ? 'my-name' : `n-${i}`);
         const avatarEl = document.getElementById(isMeSlot ? 'my-avatar' : `av-${i}`);
         const balEl = document.getElementById(isMeSlot ? 'my-wallet-amount' : `bal-${i}`);
-        
+
         if(nameEl) nameEl.innerText = "Vide";
-        if(avatarEl) avatarEl.innerHTML = `<button class="btn-sit" onclick="sitDown()">S'ASSEOIR</button>`;
-        
-        if(balEl && !isMeSlot) balEl.innerText = ""; 
-        
+        // Cacher S'ASSEOIR si le joueur est déjà assis à cette table
+        if(avatarEl) avatarEl.innerHTML = alreadySeated ? '' : `<button class="btn-sit" onclick="sitDown()">S'ASSEOIR</button>`;
+
+        if(balEl && !isMeSlot) balEl.innerText = "";
+
         if(!isMeSlot) {
             const hDiv = document.getElementById(`h-${i}`);
             if(hDiv) hDiv.innerHTML = "";
         }
     }
 
-    playerMap = {};
-    
     // Etape B : Mettre à jour MON profil (Slot 1)
     const me = players.find(p => p.id === socket.id);
     if (me) {
@@ -334,18 +337,38 @@ function createBonusButton(label, type) {
 // --- 6. DÉROULEMENT DU JEU ---
 socket.on('game-started', (data) => {
     console.log("🚀 La partie commence !");
-    clearBoard(); 
+    clearBoard();
     currentDealerId = data.dealerId;
     document.getElementById('total-pot').innerText = data.pot + " " + tableCurrency;
     document.getElementById('distribBtn').style.display = 'none';
-    document.getElementById('status-msg').innerText = "La partie commence !";
-    
+
+    // BUG-B fix : afficher qui joue en premier dès la distribution
+    const statusEl = document.getElementById('status-msg');
+    if (statusEl) {
+        statusEl.innerText = data.activePlayerId === socket.id
+            ? 'À VOUS !'
+            : `Tour de ${data.activePlayer}`;
+    }
+
     // Reset états
-    hasFolded = false; 
+    hasFolded = false;
     isPassing = false;
-    cardsPlayedInRound = 0; 
+    cardsPlayedInRound = 0;
     closeWinnerModal();
     updateDealerUI();
+
+    // BUG-A fix : remplir les mini-mains des adversaires (5 dos de cartes)
+    Object.entries(playerMap).forEach(([pid, slot]) => {
+        if (pid === socket.id || slot < 2) return;
+        const hDiv = document.getElementById(`h-${slot}`);
+        if (!hDiv) return;
+        hDiv.innerHTML = '';
+        for (let j = 0; j < 5; j++) {
+            const back = document.createElement('div');
+            back.className = 'card-back';
+            hDiv.appendChild(back);
+        }
+    });
 });
 
 socket.on('receive-cards', (data) => {
@@ -457,6 +480,9 @@ socket.on('next-turn', (data) => {
     document.getElementById('status-msg').innerText = isMyTurn ? "À VOUS !" : `Tour de ${data.activeUsername}`;
     updateTurnUI(data.activePlayerId);
     updateActionPanel();
+    // Cacher le timer entre les tours
+    const timerEl = document.getElementById('turn-timer');
+    if (timerEl) timerEl.style.display = 'none';
 });
 
 socket.on('game-over', (data) => {
@@ -490,6 +516,9 @@ socket.on('game-over', (data) => {
         actionsEl.appendChild(btn);
     }
     updateDealerUI();
+    // Cacher le timer en fin de partie
+    const timerGOEl = document.getElementById('turn-timer');
+    if (timerGOEl) timerGOEl.style.display = 'none';
 });
 
 // Écouteur pour erreur de démarrage
@@ -551,6 +580,9 @@ function updateTurnUI(activeId) {
 
 function closeWinnerModal() {
     document.getElementById('winner-modal').style.display = 'none';
+    // BUG-E fix : effacer le bouton "RETOUR AU SALON" avant la manche suivante
+    const actEl = document.getElementById('special-actions');
+    if (actEl) actEl.innerHTML = '';
     updateDealerUI();
     clearBoard();
 }
@@ -645,16 +677,6 @@ socket.on('turn-tick', (data) => {
     const pct = Math.max(0, (s / TURN_TOTAL_SEC) * 100);
     barEl.style.width      = pct + '%';
     barEl.style.background = s > 10 ? '#2ecc71' : (s > 5 ? '#e67e22' : '#e74c3c');
-});
-
-// Cacher le timer quand ce n'est plus mon tour
-socket.on('next-turn', () => {
-    const timerEl = document.getElementById('turn-timer');
-    if (timerEl) timerEl.style.display = 'none';
-});
-socket.on('game-over', () => {
-    const timerEl = document.getElementById('turn-timer');
-    if (timerEl) timerEl.style.display = 'none';
 });
 
 // =====================================================
