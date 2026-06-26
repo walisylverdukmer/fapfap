@@ -79,6 +79,16 @@ Pas de middleware `io.use()` — toutes les connexions Socket.IO aboutissent. L'
 002_salon.sql         → salon_tables, table_seats, table_observers, v_salon_state.
 003_sprint6.sql       → Colonne last_seen_at sur users. Club "Public" (id auto). pin_message.
 004_notifications.sql → notifications, notification_reads, v_notifications_unread.
+005_ux21.sql          → academy_wallets, academy_transactions. salon_tables enrichi
+                        (table_type, currency, academy_level).
+006_fap22.sql         → terms_acceptances, withdrawal_requests, platform_settings.
+                        Étend l'enum notification_type.
+```
+
+**Runners de migration** : toujours exécuter depuis `server/` (pas la racine) pour que dotenv trouve `server/.env`.
+```bash
+cd server && node run_migration_005.js
+cd server && node run_migration_006.js
 ```
 
 ### Services Render
@@ -94,6 +104,32 @@ L'URL de l'application en production est `https://fap-fap-api.onrender.com/`.
 
 32 cartes : valeurs 3 à 10 × 4 couleurs (`spade`, `heart`, `club`, `diamond`). Victoires spéciales validées côté serveur : `TCHIA` (somme ≤ 21), `3 SEPT`, `CARRE`, `COULEUR` (flush sans 3), `KORATTE` (flush avec 3, pot × 2).
 
+### Table de jeu — responsivité mobile
+
+`client/game-layout.css` + `client/game-scale.js` gèrent la mise à l'échelle :
+- La table native est **900×520px**. `game-scale.js` applique un `CSS transform scale()` pour l'adapter à l'écran.
+- **Mobile paysage** : header réduit à 44px, overhangs compressés (ovhT=30, ovhB=105 vs 65+195 en portrait). Gain de ~25% de scale factor.
+- **Breakpoint mobile** élargi à 900px (depuis 768px) pour couvrir les tablettes.
+- **Modal zoom carte** (`#card-zoom-modal`) : tap sur n'importe quelle `.card-on-table` → affiche la carte en 150×220px plein écran. Tap hors-tour sur `.card-img` en main → zoom aussi.
+- **Cartes** : `.cv` = valeur (haut), `.cs` = symbole (bas, retourné 180°) — classe HTML unifiée pour table et main.
+- `pz-3` / `pz-4` : maintenant en `flex-direction:column` à l'intérieur de la table (ex-`right:-80px` était hors écran).
+
 ### PWA
 
 `client/manifest.json` + `client/sw.js` (Service Worker network-first). SW n'intercepte jamais `/socket.io/` ni `/api/`. Icônes dans `client/icons/` (SVG + PNG 192/512 générés par `generate-icons.js`).
+
+### Dashboard admin (FAP FAP 2.2)
+
+`client/dashboard-pro.html` : navigation à 5 onglets via `showTab(name)`.
+- **Aperçu** : stats + retraits Wave + demandes jetons
+- **Joueurs** : liste complète filtrée avec actions (suspendre/réactiver/bannir/ajuster solde)
+- **Transactions** : historique 300 lignes, filtre type + recherche texte
+- **Clubs & Katika** : stats par club + formulaire recrutement Katika
+- **Annonces** : CRUD annonces
+
+Routes admin (toutes `requireRole('superadmin')`) :
+- `GET /api/admin/users` — liste complète (katika = seulement son club)
+- `GET /api/admin/transactions?type=X&limit=N`
+- `GET /api/admin/clubs` — stats agrégées
+- `PUT /api/admin/users/:id/wallet` — ajustement solde + audit_log
+- `PUT /api/admin/users/:id/suspend|unsuspend|ban`
