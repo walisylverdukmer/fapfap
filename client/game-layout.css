@@ -183,6 +183,28 @@ body {
 
 @keyframes quickPop { from { transform: scale(1.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+/* ── Wrapper carte + étiquette joueur ────────────────── */
+.card-table-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    pointer-events: auto;
+    cursor: pointer;
+}
+.card-player-name {
+    font-size: 0.62rem;
+    font-weight: bold;
+    color: rgba(255,255,255,0.9);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+    white-space: nowrap;
+    max-width: 70px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    letter-spacing: 0.02em;
+}
+
 /* ── Slots joueurs ───────────────────────────────── */
 .player-slot {
     position: absolute;
@@ -257,6 +279,18 @@ body {
 .card-img .cs { font-size: 1.6rem; line-height: 1; align-self: flex-end; }
 .card-img:hover:not(.folded) { transform: translateY(-12px); z-index: 50; box-shadow: 0 12px 24px rgba(0,0,0,0.6); }
 .card-img.folded { opacity: 0.4; cursor: default; }
+
+/* Animation de départ de la carte (quitte la main vers la table) */
+@keyframes cardLeaveHand {
+    0%   { transform: translateY(0)    scale(1);   opacity: 1; }
+    60%  { transform: translateY(-30px) scale(1.1); opacity: 0.7; }
+    100% { transform: translateY(-55px) scale(0.7); opacity: 0; }
+}
+.card-img.card-playing {
+    animation: cardLeaveHand 0.28s ease-in forwards;
+    pointer-events: none;
+    z-index: 200;
+}
 .red { color: var(--card-red) !important; }
 
 /* ── Mini-mains adversaires ──────────────────────── */

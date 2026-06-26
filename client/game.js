@@ -402,11 +402,14 @@ function renderHand() {
 }
 
 function playCard(index) {
-    const card = myHand[index];
+    const card    = myHand[index];
+    const handEl  = document.getElementById('my-hand');
+    const cardEls = handEl ? handEl.querySelectorAll('.card-img') : [];
+    if (cardEls[index]) cardEls[index].classList.add('card-playing');
+
     socket.emit('card-played', { club_id: user.club_id, salon_table_id: salonTableId, card: card });
-    // Ne pas retirer la carte optimistement : on attend display-card ou card-rejected
     isMyTurn = false;
-    renderHand();
+    // Ne pas retirer la carte immédiatement : on attend display-card ou card-rejected
 }
 
 socket.on('player-status-pass', (data) => {
@@ -439,18 +442,29 @@ socket.on('display-card', (data) => {
     const icons = { spade: '♠', heart: '♥', club: '♣', diamond: '♦' };
     const isRed = (data.card.suit === 'heart' || data.card.suit === 'diamond');
 
+    // Wrapper carte + étiquette joueur
+    const wrapper = document.createElement('div');
+    wrapper.className = 'card-table-wrapper';
+
     const cardOnTable = document.createElement('div');
     cardOnTable.className = `card-on-table ${isRed ? 'red' : ''}`;
     cardOnTable.innerHTML = `<span class="cv">${data.card.value}</span><span class="cs">${icons[data.card.suit]}</span>`;
-    // Tap/clic → zoom plein écran
-    const playerName = document.getElementById(slotNum === 1 ? 'my-name' : `n-${slotNum}`)?.innerText || '';
-    cardOnTable.onclick = () => showCardZoom(data.card.value, data.card.suit, playerName);
 
-    if(targetZone) targetZone.appendChild(cardOnTable);
+    const playerNameEl = document.createElement('div');
+    playerNameEl.className = 'card-player-name';
+    playerNameEl.textContent = data.username || '';
+
+    // Tap/clic → zoom plein écran
+    const rawName = document.getElementById(slotNum === 1 ? 'my-name' : `n-${slotNum}`)?.innerText || data.username || '';
+    wrapper.onclick = () => showCardZoom(data.card.value, data.card.suit, rawName);
+
+    wrapper.appendChild(cardOnTable);
+    wrapper.appendChild(playerNameEl);
+    if (targetZone) targetZone.appendChild(wrapper);
 
     if (slotNum > 1) {
         const hDiv = document.getElementById(`h-${slotNum}`);
-        if(hDiv && hDiv.lastChild) hDiv.removeChild(hDiv.lastChild);
+        if (hDiv && hDiv.lastChild) hDiv.removeChild(hDiv.lastChild);
     }
     updateActionPanel();
 });
@@ -786,5 +800,71 @@ socket.on('change-table-ack', (data) => {
     localStorage.setItem('salon_table_id', data.salon_table_id);
     localStorage.removeItem('salon_observer');
     window.location.reload();
+});
+
+// =====================================================
+// RECONNEXION (perte réseau temporaire)
+// =====================================================
+
+// Socket.IO se reconnecte automatiquement après une micro-coupure réseau.
+// On ré-émet join/sit pour retrouver la partie en cours.
+socket.on('connect', () => {
+    if (!socket._hasConnectedOnce) { socket._hasConnectedOnce = true; return; }
+    // Reconnexion automatique Socket.IO : ré-identifier le joueur
+    const token = localStorage.getItem('token');
+    if (token) socket.emit('authenticate', token);
+    if (salonTableId) {
+        socket.emit('sit-at-table', { salon_table_id: salonTableId, username: user.username });
+    } else if (user.club_id) {
+        socket.emit('join-table', { club_id: user.club_id, username: user.username, stake: user.stake });
+    }
+});
+
+socket.on('player-disconnected', (data) => {
+    showAnnouncement(`⚡ ${data.username} déconnecté — ${data.reconnectSec}s`, 3000);
+    const slot = playerMap[data.id];
+    if (slot) {
+        const nameEl = document.getElementById(slot === 1 ? 'my-name' : `n-${slot}`);
+        if (nameEl && !nameEl.innerHTML.includes('dc-tag')) {
+            nameEl.innerHTML += ' <span class="dc-tag" style="color:#e74c3c;font-size:0.75em">(DC)</span>';
+        }
+    }
+});
+
+socket.on('player-reconnected', (data) => {
+    showAnnouncement(`✅ ${data.username} reconnecté !`, 2000);
+    // player-list-update qui suit nettoie l'indicateur DC
+});
+
+socket.on('reconnect-state', (data) => {
+    document.getElementById('total-pot').innerText = data.pot + ' ' + tableCurrency;
+    if (data.activePlayerId) {
+        isMyTurn = (data.activePlayerId === socket.id);
+        const statusEl = document.getElementById('status-msg');
+        if (statusEl) statusEl.innerText = isMyTurn ? 'À VOUS !' : `Tour de ${data.activeUsername}`;
+        updateTurnUI(data.activePlayerId);
+    }
+    // Remettre les cartes sur la table
+    clearBoard();
+    const icons = { spade: '♠', heart: '♥', club: '♣', diamond: '♦' };
+    (data.cardsOnTable || []).forEach(entry => {
+        const slotNum = playerMap[entry.playerId];
+        if (!slotNum) return;
+        const targetZone = document.getElementById(`pz-${slotNum}`);
+        if (!targetZone) return;
+        const isRed = (entry.card.suit === 'heart' || entry.card.suit === 'diamond');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'card-table-wrapper';
+        const cardEl = document.createElement('div');
+        cardEl.className = `card-on-table ${isRed ? 'red' : ''}`;
+        cardEl.innerHTML = `<span class="cv">${entry.card.value}</span><span class="cs">${icons[entry.card.suit]}</span>`;
+        const nameEl2 = document.createElement('div');
+        nameEl2.className = 'card-player-name';
+        nameEl2.textContent = entry.username || '';
+        wrapper.appendChild(cardEl);
+        wrapper.appendChild(nameEl2);
+        targetZone.appendChild(wrapper);
+    });
+    updateActionPanel();
 });
 

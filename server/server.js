@@ -76,6 +76,7 @@ const io = new Server(server, {
 // État global
 let tables = {};
 const connectedSockets = new Map(); // userId → socketId
+const pendingReconnect = new Map(); // userId → { tableId, oldSocketId, timer }
 const TURN_TIMEOUT_MS  = parseInt(process.env.TURN_TIMEOUT_MS || '30000', 10);
 
 app.set('io', io);
@@ -204,6 +205,12 @@ function startTurnTimer(tableId) {
         logAction(tableId, `${current.username} a dépassé le temps (${TURN_TIMEOUT_MS / 1000}s) — auto-banqué.`, 'warning');
         io.to(tableId).emit('player-folded', { username: current.username, id: current.id, autoFold: true });
 
+        // Annuler la fenêtre de reconnexion si encore ouverte
+        if (current.dbId) {
+            const pr = pendingReconnect.get(current.dbId);
+            if (pr) { if (pr.timer) clearTimeout(pr.timer); pendingReconnect.delete(current.dbId); }
+        }
+
         const active = t.players.filter(p => p.isInHand);
         if (active.length === 1) {
             routeGameOver(tableId, active[0], t.pot, 'TOUS BANQUÉ (timeout)', t.clubId, 'tous_banque');
@@ -276,7 +283,7 @@ function determineTrickWinner(tableId, table, club_id) {
 }
 
 // BUG-04 corrigé : comparaison inter-passeurs
-function checkFinalReveal(tableId, lastWinnerObj, lastCard, isFinalKoratte = false, club_id) {
+async function checkFinalReveal(tableId, lastWinnerObj, lastCard, isFinalKoratte = false, club_id) {
     const table = tables[tableId];
     if (!table) return;
     clearTurnTimer(tableId);
@@ -308,13 +315,78 @@ function checkFinalReveal(tableId, lastWinnerObj, lastCard, isFinalKoratte = fal
         }
     }
 
-    const currentPot = isFinalKoratte ? table.pot * 2 : table.pot;
+    // KORATTE final : débiter les perdants avant de router game-over
+    if (isFinalKoratte && finalWinner) {
+        await collectKoratteStakes(tableId, finalWinner);
+    }
+
+    const currentPot = table.pot; // déjà doublé par collectKoratteStakes si KORATTE
     const reason     = isFinalKoratte ? 'KORATTE (3 final)' : 'FIN DE MANCHE';
     const winType    = isFinalKoratte ? 'koratte' : 'normal';
 
     setTimeout(() => {
         routeGameOver(tableId, finalWinner, currentPot, reason, club_id, winType);
     }, 2500);
+}
+
+// KORATTE : débite chaque perdant d'une mise supplémentaire pour doubler le pot légalement
+async function collectKoratteStakes(tableId, winner) {
+    const table = tables[tableId];
+    if (!table) return;
+
+    const isAcademy = table.tableType === 'academy';
+    const stake     = parseFloat(table.stake);
+    let   totalCollected = 0;
+
+    for (const loser of table.players) {
+        if (loser.id === winner.id || !loser.dbId) continue;
+        try {
+            if (isAcademy) {
+                const { rows } = await db.query(
+                    'SELECT balance FROM academy_wallets WHERE user_id=$1', [loser.dbId]
+                );
+                const bal    = parseFloat(rows[0]?.balance || 0);
+                const toPay  = Math.min(stake, Math.max(0, bal));
+                if (toPay > 0) {
+                    await db.query(
+                        'UPDATE academy_wallets SET balance=balance-$1 WHERE user_id=$2',
+                        [toPay, loser.dbId]
+                    );
+                    loser.wallet = Math.max(0, loser.wallet - toPay);
+                    totalCollected += toPay;
+                    io.to(loser.id).emit('wallet-update', { balance: loser.wallet });
+                }
+            } else {
+                const { rows } = await db.query(
+                    'SELECT wallet FROM users WHERE id=$1', [loser.dbId]
+                );
+                const bal      = parseFloat(rows[0]?.wallet || 0);
+                const toPay    = Math.min(stake, Math.max(0, bal));
+                if (toPay > 0) {
+                    const balAfter = bal - toPay;
+                    await db.query('UPDATE users SET wallet=wallet-$1 WHERE id=$2', [toPay, loser.dbId]);
+                    await db.query(
+                        `INSERT INTO transactions
+                         (user_id, club_id, amount, balance_before, balance_after, type, note)
+                         VALUES ($1, $2, $3, $4, $5, 'mise', 'Mise KORATTE supplémentaire')`,
+                        [loser.dbId, table.clubId, -toPay, bal, balAfter]
+                    );
+                    loser.wallet = balAfter;
+                    totalCollected += toPay;
+                    io.to(loser.id).emit('wallet-update', { balance: loser.wallet });
+                }
+            }
+        } catch (err) {
+            console.error(`[collectKoratteStakes] ${loser.username}:`, err.message);
+        }
+    }
+
+    table.pot += totalCollected;
+    io.to(tableId).emit('player-list-update', table.players);
+    logAction(tableId,
+        `KORATTE — mises supplémentaires (+${totalCollected}) collectées. Pot réel : ${table.pot}.`,
+        'system'
+    );
 }
 
 // Barème FAP FAP 2.2 : commission variable selon le nombre de joueurs
@@ -330,13 +402,24 @@ async function handleGameOver(tableId, winner, pot, reason, club_id, winType = '
     if (!table || !winner) return;
     clearTurnTimer(tableId);
 
+    // Fermer toutes les fenêtres de reconnexion en cours
+    for (const p of table.players) {
+        if (p.dbId) {
+            const pr = pendingReconnect.get(p.dbId);
+            if (pr && pr.tableId === tableId) {
+                if (pr.timer) clearTimeout(pr.timer);
+                pendingReconnect.delete(p.dbId);
+            }
+        }
+    }
+
     let winnerGain     = parseFloat(pot);
     let commission     = 0;
     let katikaId       = null;
     let waliId         = null;
 
-    // Commission dynamique selon le nombre de joueurs à la table
-    const nbPlayers    = table.players.length || 2;
+    // Commission figée sur l'effectif au moment du start-game
+    const nbPlayers    = table.nbPlayersAtStart || table.players.length || 2;
     const commissionRate = commissionRateByPlayerCount(nbPlayers);
 
     try {
@@ -442,6 +525,17 @@ async function handleAcademyGameOver(tableId, winner, pot, reason, winType = 'no
     if (!table || !winner) return;
     clearTurnTimer(tableId);
 
+    // Fermer toutes les fenêtres de reconnexion en cours
+    for (const p of table.players) {
+        if (p.dbId) {
+            const pr = pendingReconnect.get(p.dbId);
+            if (pr && pr.tableId === tableId) {
+                if (pr.timer) clearTimeout(pr.timer);
+                pendingReconnect.delete(p.dbId);
+            }
+        }
+    }
+
     const winnerGain = parseFloat(pot);
 
     try {
@@ -544,7 +638,10 @@ function routeGameOver(tableId, winner, pot, reason, clubId, winType = 'normal')
     }
 }
 
-// Sprint 5 — Gestion des déconnexions en cours de partie
+// Durée de la fenêtre de reconnexion (ms)
+const RECONNECT_WINDOW_MS = 30_000;
+
+// Gestion des déconnexions — avec fenêtre de reconnexion de 30s en cours de partie
 function handleDeparture(socket, tableId) {
     const table = tables[tableId];
     if (!table) return;
@@ -555,7 +652,70 @@ function handleDeparture(socket, tableId) {
     const wasInTurn = (table.turnIndex === pIdx);
     const wasDealer = (table.dealerIndex === pIdx);
 
-    // Auto-fold si partie en cours et joueur actif
+    // ── Fenêtre de reconnexion ────────────────────────────────────────────────
+    // Conditions : partie en cours, joueur encore dans la main, authentifié
+    if (table.status === 'PLAYING' && player.isInHand && !player.isPassing && player.dbId) {
+        player.disconnected   = true;
+        player.disconnectedAt = Date.now();
+
+        io.to(tableId).emit('player-disconnected', {
+            id:           player.id,
+            username:     player.username,
+            reconnectSec: Math.floor(RECONNECT_WINDOW_MS / 1000)
+        });
+        logAction(tableId,
+            `${player.username} déconnecté — ${RECONNECT_WINDOW_MS / 1000}s pour se reconnecter.`,
+            'warning'
+        );
+
+        // Si c'est son tour, le turnTimer (30s) gère déjà l'auto-banque.
+        // Sinon : on ouvre une fenêtre séparée.
+        let reconnectTimer = null;
+        if (!wasInTurn) {
+            reconnectTimer = setTimeout(() => {
+                const rt = tables[tableId];
+                if (!rt) { pendingReconnect.delete(player.dbId); return; }
+                const pp = rt.players.find(p => p.id === player.id);
+                if (!pp || !pp.disconnected) { pendingReconnect.delete(player.dbId); return; }
+
+                pendingReconnect.delete(player.dbId);
+                clearTurnTimer(tableId);
+                pp.isInHand     = false;
+                pp.hand         = [];
+                pp.disconnected = false;
+                logAction(tableId, `${pp.username} — reconnexion expirée — auto-banqué.`, 'warning');
+                io.to(tableId).emit('player-folded', { username: pp.username, id: pp.id, autoFold: true });
+
+                const ppIdx2 = rt.players.findIndex(p => p.id === pp.id);
+                if (ppIdx2 !== -1) {
+                    rt.players.splice(ppIdx2, 1);
+                    if (rt.dealerIndex > ppIdx2 && rt.dealerIndex > 0) rt.dealerIndex--;
+                    if (rt.turnIndex   > ppIdx2 && rt.turnIndex   > 0) rt.turnIndex--;
+                }
+                io.to(tableId).emit('player-list-update', rt.players);
+
+                const active = rt.players.filter(p2 => p2.isInHand);
+                if (active.length === 1) {
+                    routeGameOver(tableId, active[0], rt.pot, 'TOUS BANQUÉ (déconnexion)', rt.clubId, 'tous_banque');
+                } else if (active.length > 1) {
+                    startTurnTimer(tableId);
+                }
+            }, RECONNECT_WINDOW_MS);
+        }
+
+        pendingReconnect.set(player.dbId, { tableId, oldSocketId: socket.id, timer: reconnectTimer });
+        if (socket.userId) connectedSockets.delete(socket.userId);
+
+        // Nettoyer le siège DB sans retirer de table.players
+        if (tableId.startsWith('salon_') && socket.userId) {
+            const salonId = parseInt(tableId.replace('salon_', ''), 10);
+            db.query('DELETE FROM table_seats WHERE table_id=$1 AND user_id=$2', [salonId, socket.userId])
+                .catch(e => console.error('[handleDeparture] seat cleanup:', e.message));
+        }
+        return;
+    }
+
+    // ── Départ immédiat (hors partie ou joueur à PASS) ────────────────────────
     if (table.status === 'PLAYING' && player.isInHand && !player.isPassing) {
         clearTurnTimer(tableId);
         player.isInHand = false;
@@ -566,7 +726,6 @@ function handleDeparture(socket, tableId) {
 
     table.players.splice(pIdx, 1);
 
-    // Salon 2.0 : nettoyer le siège en DB si table salon
     if (tableId.startsWith('salon_') && socket.userId) {
         const salonId = parseInt(tableId.replace('salon_', ''), 10);
         db.query('DELETE FROM table_seats WHERE table_id=$1 AND user_id=$2', [salonId, socket.userId])
@@ -580,7 +739,6 @@ function handleDeparture(socket, tableId) {
         return;
     }
 
-    // Ajustement des indices après suppression
     if (table.dealerIndex >= pIdx && table.dealerIndex > 0) table.dealerIndex--;
     if (table.turnIndex  >= pIdx && table.turnIndex  > 0) table.turnIndex--;
 
@@ -725,6 +883,43 @@ io.on('connection', (socket) => {
 
         const table = tables[tableId];
 
+        // ── Reconnexion en mode club ──────────────────────────────────────────
+        if (socket.userId && table && table.status === 'PLAYING') {
+            const pendingR = pendingReconnect.get(socket.userId);
+            if (pendingR && pendingR.tableId === tableId) {
+                const pp = table.players.find(p => p.id === pendingR.oldSocketId);
+                if (pp && pp.disconnected) {
+                    if (pendingR.timer) clearTimeout(pendingR.timer);
+                    pendingReconnect.delete(socket.userId);
+
+                    const oldId = pp.id;
+                    pp.id           = socket.id;
+                    pp.disconnected = false;
+                    pp.wallet       = userBalance;
+                    table.cardsOnTable = table.cardsOnTable.map(entry =>
+                        entry.playerId === oldId ? { ...entry, playerId: socket.id } : entry
+                    );
+
+                    connectedSockets.set(socket.userId, socket.id);
+                    socket.emit('wallet-update', { balance: userBalance });
+                    socket.emit('receive-cards', {
+                        hand: pp.hand,
+                        turn: table.players[table.turnIndex]?.id === socket.id
+                    });
+                    socket.emit('reconnect-state', {
+                        pot:            table.pot,
+                        activePlayerId: table.players[table.turnIndex]?.id,
+                        activeUsername: table.players[table.turnIndex]?.username,
+                        cardsOnTable:   table.cardsOnTable
+                    });
+                    io.to(tableId).emit('player-reconnected', { id: socket.id, username: pp.username });
+                    io.to(tableId).emit('player-list-update', table.players);
+                    logAction(tableId, `${pp.username} s'est reconnecté.`, 'system');
+                    return;
+                }
+            }
+        }
+
         if (table.players.length < 4 && !table.players.find(p => p.username === data.username)) {
             table.players.push({
                 id:               socket.id,
@@ -736,7 +931,7 @@ io.on('connection', (socket) => {
                 isInHand:         true,
                 isPassing:        false,
                 passedCards:      [],
-                suspiciousClaims: fraudCount   // Sprint 5 : persisté
+                suspiciousClaims: fraudCount
             });
             logAction(tableId, `${data.username} a rejoint la table.`);
         }
@@ -781,6 +976,10 @@ io.on('connection', (socket) => {
         const tableId = resolveTableId(data);
         const table   = tables[tableId];
         if (!table || table.players.length < 2) return;
+        if (table.status === 'PLAYING') {
+            socket.emit('game-start-failed', { message: 'Une partie est déjà en cours sur cette table.' });
+            return;
+        }
         const dealer = table.players[table.dealerIndex];
         if (socket.id !== dealer.id) return;
 
@@ -870,6 +1069,7 @@ io.on('connection', (socket) => {
         table.cardsOnTable       = [];
         table.cardsPlayedInRound = 0;
         table.status             = 'PLAYING';
+        table.nbPlayersAtStart   = table.players.length;
         table.turnIndex          = (table.dealerIndex - 1 + table.players.length) % table.players.length;
 
         table.players.forEach(p => {
@@ -1084,7 +1284,12 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const finalPot   = data.type === 'KORATTE' ? table.pot * 2 : table.pot;
+        // KORATTE main : débiter les perdants avant de doubler le pot
+        if (data.type === 'KORATTE') {
+            await collectKoratteStakes(tableId, winner);
+        }
+
+        const finalPot   = table.pot; // déjà doublé par collectKoratteStakes si KORATTE
         const winTypeMap = {
             'KORATTE': 'koratte', 'CARRE':  'carre',
             'TCHIA':   'tchia',   '3 SEPT': 'trois_sept', 'COULEUR': 'couleur'
@@ -1239,6 +1444,60 @@ io.on('connection', (socket) => {
             }
 
             const table = tables[tableId];
+
+            // ── Reconnexion : le joueur revient dans une partie en cours ──────
+            const pendingR = pendingReconnect.get(u.id);
+            if (pendingR && pendingR.tableId === tableId && table && table.status === 'PLAYING') {
+                const pp = table.players.find(p => p.id === pendingR.oldSocketId);
+                if (pp && pp.disconnected) {
+                    // Annuler le timer de reconnexion
+                    if (pendingR.timer) clearTimeout(pendingR.timer);
+                    pendingReconnect.delete(u.id);
+
+                    // Mettre à jour le socket.id dans le slot joueur
+                    const oldId = pp.id;
+                    pp.id           = socket.id;
+                    pp.disconnected = false;
+                    pp.wallet       = userBalance;
+
+                    // Mettre à jour les entrées cardsOnTable qui référencent l'ancien socket.id
+                    table.cardsOnTable = table.cardsOnTable.map(entry =>
+                        entry.playerId === oldId ? { ...entry, playerId: socket.id } : entry
+                    );
+
+                    socket.join(tableId);
+                    socket.leave('salon_room');
+                    socket.userId      = u.id;
+                    socket.userRole    = u.role;
+                    socket.salonTableId = salonId;
+                    connectedSockets.set(u.id, socket.id);
+
+                    // Réinsérer le siège en DB
+                    await db.query(
+                        `INSERT INTO table_seats (table_id, user_id, seat_number)
+                         VALUES ($1, $2, 1) ON CONFLICT DO NOTHING`,
+                        [salonId, u.id]
+                    );
+
+                    // Envoyer l'état complet de la partie au joueur reconnecté
+                    socket.emit('wallet-update', { balance: userBalance });
+                    socket.emit('receive-cards', {
+                        hand: pp.hand,
+                        turn: table.players[table.turnIndex]?.id === socket.id
+                    });
+                    socket.emit('reconnect-state', {
+                        pot:            table.pot,
+                        activePlayerId: table.players[table.turnIndex]?.id,
+                        activeUsername: table.players[table.turnIndex]?.username,
+                        cardsOnTable:   table.cardsOnTable
+                    });
+
+                    io.to(tableId).emit('player-reconnected', { id: socket.id, username: pp.username });
+                    io.to(tableId).emit('player-list-update', table.players);
+                    logAction(tableId, `${pp.username} s'est reconnecté.`, 'system');
+                    return;
+                }
+            }
 
             // BUG-F fix : bloquer si une partie est en cours (vérification RAM)
             if (table && table.status === 'PLAYING') {
