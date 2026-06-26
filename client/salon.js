@@ -638,7 +638,21 @@ function openModalWithdrawal() {
     document.getElementById('wd-wave-holder').value  = '';
     document.getElementById('wd-observations').value = '';
     document.getElementById('wd-error').textContent  = '';
+    const preview = document.getElementById('wd-net-preview');
+    if (preview) preview.style.display = 'none';
     document.getElementById('modal-withdrawal').classList.add('open');
+}
+
+function updateWdPreview() {
+    const amount  = parseFloat(document.getElementById('wd-amount').value);
+    const preview = document.getElementById('wd-net-preview');
+    if (!preview) return;
+    if (!amount || amount <= 0) { preview.style.display = 'none'; return; }
+    const fee = Math.round(amount * 0.02 * 100) / 100;
+    const net = Math.round((amount - fee) * 100) / 100;
+    document.getElementById('wd-fee-val').textContent = fee.toLocaleString('fr-FR');
+    document.getElementById('wd-net-val').textContent = net.toLocaleString('fr-FR');
+    preview.style.display = 'block';
 }
 
 async function submitWithdrawal() {

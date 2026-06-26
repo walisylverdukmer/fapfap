@@ -581,7 +581,11 @@
             </div>
             <div class="modal-form-group">
                 <label>Montant demandé (FCFA)</label>
-                <input type="number" id="wd-amount" placeholder="Ex: 5000" min="500" step="100">
+                <input type="number" id="wd-amount" placeholder="Ex: 5000" min="500" step="100" oninput="updateWdPreview()">
+                <div id="wd-net-preview" style="margin-top:6px;font-size:0.8rem;color:#888;display:none;">
+                    Frais plateforme 2% : <span id="wd-fee-val" style="color:#e74c3c;font-weight:bold;"></span> FCFA
+                    — Vous recevrez <span id="wd-net-val" style="color:#2ecc71;font-weight:bold;"></span> FCFA via Wave
+                </div>
             </div>
             <div class="modal-form-group">
                 <label>Numéro Wave</label>

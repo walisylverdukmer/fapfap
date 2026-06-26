@@ -254,15 +254,37 @@ exports.markPaid = async (req, res) => {
             return res.status(400).json({ msg: 'Solde joueur insuffisant pour effectuer ce retrait.' });
         }
 
-        const walletAfter = walletBefore - amount;
+        // 2% de frais de retrait prélevés par la plateforme
+        const fee          = Math.round(amount * 0.02 * 100) / 100;
+        const netAmount    = Math.round((amount - fee) * 100) / 100;
+        const walletAfter  = Math.round((walletBefore - amount) * 100) / 100;
 
+        // Débiter le joueur du montant total demandé
         await db.query('UPDATE users SET wallet = wallet - $1 WHERE id = $2', [amount, reqData.uid]);
         await db.query(
             `INSERT INTO transactions (user_id, amount, balance_before, balance_after, type, note)
              VALUES ($1, $2, $3, $4, 'transfert', $5)`,
             [reqData.uid, -amount, walletBefore, walletAfter,
-             `Retrait Wave #${id} — ${reqData.wave_number}`]
+             `Retrait Wave #${id} — ${reqData.wave_number} (net: ${netAmount.toLocaleString('fr-FR')} FCFA, frais 2%: ${fee.toLocaleString('fr-FR')} FCFA)`]
         );
+
+        // Créditer Wali des frais de retrait (2%)
+        if (fee > 0) {
+            const { rows: waliRows } = await db.query(
+                "SELECT id, wallet FROM users WHERE role='superadmin' LIMIT 1"
+            );
+            if (waliRows[0]) {
+                const waliBefore = parseFloat(waliRows[0].wallet);
+                await db.query('UPDATE users SET wallet = wallet + $1 WHERE id = $2', [fee, waliRows[0].id]);
+                await db.query(
+                    `INSERT INTO transactions (user_id, amount, balance_before, balance_after, type, note)
+                     VALUES ($1, $2, $3, $4, 'commission', $5)`,
+                    [waliRows[0].id, fee, waliBefore, waliBefore + fee,
+                     `Frais retrait 2% — Retrait #${id} de ${reqData.username}`]
+                );
+            }
+        }
+
         await db.query(
             "UPDATE withdrawal_requests SET status='paid', reviewed_by=$1, reviewed_at=NOW(), paid_at=NOW() WHERE id=$2",
             [reviewerId, id]
@@ -271,7 +293,7 @@ exports.markPaid = async (req, res) => {
             `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_value)
              VALUES ($1, 'withdrawal_paid', 'withdrawal_requests', $2, $3::jsonb)`,
             [reviewerId, parseInt(id), JSON.stringify({
-                amount, wave_number: reqData.wave_number,
+                amount, fee, net_amount: netAmount, wave_number: reqData.wave_number,
                 balance_before: walletBefore, balance_after: walletAfter
             })]
         );
@@ -283,10 +305,10 @@ exports.markPaid = async (req, res) => {
                 type:      'retrait_paye',
                 audience:  'all_admin',
                 title:     'Retrait payé',
-                body:      `${amount.toLocaleString('fr-FR')} FCFA versés à ${reqData.username} via Wave ${reqData.wave_number}`,
+                body:      `${netAmount.toLocaleString('fr-FR')} FCFA versés à ${reqData.username} via Wave ${reqData.wave_number} (frais 2% : ${fee.toLocaleString('fr-FR')} FCFA)`,
                 actorId:   reviewerId,
                 subjectId: reqData.uid,
-                metadata:  { request_id: parseInt(id), amount, wave_number: reqData.wave_number }
+                metadata:  { request_id: parseInt(id), amount, fee, net_amount: netAmount, wave_number: reqData.wave_number }
             }).catch(e => console.error('[withdrawal.markPaid] notif:', e.message));
 
             const playerSocketId = connectedSockets?.get(reqData.uid);
@@ -294,13 +316,15 @@ exports.markPaid = async (req, res) => {
                 io.to(playerSocketId).emit('withdrawal:paid', {
                     request_id: parseInt(id),
                     amount,
+                    net_amount: netAmount,
+                    fee,
                     new_balance: walletAfter
                 });
                 io.to(playerSocketId).emit('wallet-update', { balance: walletAfter });
             }
         }
 
-        res.json({ msg: 'Retrait marqué comme payé. Solde joueur débité.', new_balance: walletAfter });
+        res.json({ msg: 'Retrait marqué comme payé. Solde joueur débité.', new_balance: walletAfter, net_amount: netAmount, fee });
     } catch (err) {
         console.error('[withdrawal.markPaid]', err.message);
         res.status(500).json({ msg: 'Erreur serveur.' });

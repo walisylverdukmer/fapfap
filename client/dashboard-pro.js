@@ -265,12 +265,14 @@ async function loadWithdrawals() {
         }
 
         tbody.innerHTML = list.map(w => {
-            const date = new Date(w.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-            const actions = w.status === 'pending' ? `
+            const date      = new Date(w.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            const amount    = parseFloat(w.amount);
+            const netAmount = Math.round(amount * 0.98 * 100) / 100;
+            const actions   = w.status === 'pending' ? `
                 <button class="btn-wd-validate" onclick="validateWithdrawal(${w.id})">✓ Valider</button>
                 <button class="btn-wd-reject"   onclick="rejectWithdrawal(${w.id})">✕ Refuser</button>
             ` : w.status === 'validated' ? `
-                <button class="btn-wd-pay" onclick="payWithdrawal(${w.id})">💸 Payer</button>
+                <button class="btn-wd-pay" onclick="payWithdrawal(${w.id}, ${amount}, ${netAmount})">💸 Payer</button>
                 <button class="btn-wd-reject" onclick="rejectWithdrawal(${w.id})" style="font-size:0.7rem">Annuler</button>
             ` : `<span style="color:#555;font-size:0.75rem;">—</span>`;
 
@@ -281,14 +283,15 @@ async function loadWithdrawals() {
                     <td style="color:#888;font-size:0.78rem;">${w.phone}</td>
                     <td style="font-family:monospace;font-size:0.82rem;">${w.wave_number}</td>
                     <td style="font-size:0.82rem;">${w.wave_holder}</td>
-                    <td style="color:var(--pro-gold);font-weight:bold;">${parseFloat(w.amount).toLocaleString('fr-FR')} FCFA</td>
+                    <td style="color:var(--pro-gold);font-weight:bold;">${amount.toLocaleString('fr-FR')} FCFA</td>
+                    <td style="color:#2ecc71;font-weight:bold;">${netAmount.toLocaleString('fr-FR')} FCFA</td>
                     <td style="color:#666;font-size:0.75rem;">${date}</td>
                     <td>${WD_STATUS_LABELS[w.status] || w.status}</td>
                     <td style="white-space:nowrap;">${actions}</td>
                 </tr>`;
         }).join('');
     } catch {
-        tbody.innerHTML = `<tr><td colspan="9" style="color:#e74c3c;text-align:center;">Erreur chargement.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="color:#e74c3c;text-align:center;">Erreur chargement.</td></tr>`;
     }
 }
 
@@ -313,8 +316,11 @@ async function rejectWithdrawal(id) {
     } catch { showToast('Erreur réseau.', true); }
 }
 
-async function payWithdrawal(id) {
-    if (!confirm('Confirmer le paiement via Wave ? Cette action débitera le solde du joueur.')) return;
+async function payWithdrawal(id, amount, netAmount) {
+    const msg = netAmount
+        ? `Confirmer le paiement ?\n\nMontant demandé : ${amount.toLocaleString('fr-FR')} FCFA\nFrais plateforme (2%) : ${Math.round(amount * 0.02).toLocaleString('fr-FR')} FCFA\n→ Vous devez envoyer ${netAmount.toLocaleString('fr-FR')} FCFA via Wave`
+        : 'Confirmer le paiement via Wave ? Cette action débitera le solde du joueur.';
+    if (!confirm(msg)) return;
     try {
         const r = await apiFetch(`/api/money/withdrawals/${id}/pay`, 'PUT');
         const data = await r.json();

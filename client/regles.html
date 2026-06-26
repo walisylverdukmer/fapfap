@@ -241,21 +241,57 @@
         </ul>
     </div>
 
+    <!-- ── PAS DE SURENCHÈRE ── -->
+    <div class="rules-section">
+        <h3><span class="sec-icon">🚫</span> Pas de surenchère</h3>
+        <p>Il n'y a <strong>aucune surenchère</strong> dans le FAP FAP. La mise est fixée par la table avant le début de la partie et ne change pas en cours de jeu. Chaque joueur paie exactement la mise de la table pour participer — ni plus, ni moins.</p>
+    </div>
+
     <!-- ── COMMISSION ── -->
     <div class="rules-section">
-        <h3><span class="sec-icon">💰</span> Commission de la plateforme</h3>
-        <p>Une commission est automatiquement prélevée sur chaque pot à la fin de la manche, avant versement des gains au gagnant.</p>
+        <h3><span class="sec-icon">💰</span> Commissions &amp; frais</h3>
+        <p>Une commission est prélevée automatiquement sur le pot <strong>à chaque manche</strong>, avant que le gain ne soit crédité au gagnant. Ce prélèvement est incontournable et varie selon le nombre de joueurs à la table.</p>
+
         <table class="commission-table">
             <thead>
-                <tr><th>Joueurs</th><th>Taux</th><th>Exemple (pot 10 000 FCFA)</th></tr>
+                <tr><th>Joueurs</th><th>Taux</th><th>Exemple — Mise 300 FCFA/joueur</th></tr>
             </thead>
             <tbody>
-                <tr><td>2 joueurs</td><td style="color:var(--gold)">3 %</td><td>300 FCFA → Gain : 9 700 FCFA</td></tr>
-                <tr><td>3 joueurs</td><td style="color:var(--gold)">5 %</td><td>500 FCFA → Gain : 9 500 FCFA</td></tr>
-                <tr><td>4 joueurs</td><td style="color:var(--gold)">7 %</td><td>700 FCFA → Gain : 9 300 FCFA</td></tr>
+                <tr>
+                    <td>2 joueurs</td>
+                    <td style="color:var(--gold);font-weight:bold;">3 %</td>
+                    <td>Pot : 600 FCFA → Commission : 18 FCFA → <strong>Gain : 582 FCFA</strong></td>
+                </tr>
+                <tr>
+                    <td>3 joueurs</td>
+                    <td style="color:var(--gold);font-weight:bold;">5 %</td>
+                    <td>Pot : 900 FCFA → Commission : 45 FCFA → <strong>Gain : 855 FCFA</strong></td>
+                </tr>
+                <tr>
+                    <td>4 joueurs</td>
+                    <td style="color:var(--gold);font-weight:bold;">7 %</td>
+                    <td>Pot : 1 200 FCFA → Commission : 84 FCFA → <strong>Gain : 1 116 FCFA</strong></td>
+                </tr>
             </tbody>
         </table>
-        <p style="margin-top:10px;color:#666;font-size:0.8rem;">Ce calcul est entièrement automatique et incontournable. Les commissions sont visibles dans votre historique de transactions.</p>
+
+        <p style="margin-top:14px;color:#aaa;font-size:0.85rem;">
+            <strong>Exemple détaillé (4 joueurs, mise 300 FCFA) :</strong><br>
+            Chaque joueur verse 300 FCFA → Pot total = 4 × 300 = <strong>1 200 FCFA</strong><br>
+            Commission plateforme (7%) = 1 200 × 7% = <strong>84 FCFA</strong><br>
+            Le gagnant reçoit = 1 200 − 84 = <strong>1 116 FCFA</strong>
+        </p>
+
+        <div style="margin-top:16px;padding:12px 14px;background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.3);border-radius:8px;">
+            <p style="margin:0;font-size:0.83rem;color:#e74c3c;font-weight:bold;">💳 Frais de retrait : 2 %</p>
+            <p style="margin:6px 0 0;font-size:0.8rem;color:#aaa;">
+                Lors de chaque demande de retrait, la plateforme prélève <strong>2 % du montant retiré</strong>.<br>
+                Exemple : retrait de 10 000 FCFA → Frais : 200 FCFA → <strong>Vous recevez 9 800 FCFA via Wave</strong>.<br>
+                Ces frais sont affichés dans la modal de retrait avant toute confirmation.
+            </p>
+        </div>
+
+        <p style="margin-top:10px;color:#555;font-size:0.78rem;">Toutes les commissions et frais sont enregistrés dans votre historique de transactions.</p>
     </div>
 
     <!-- ── FAQ ── -->
