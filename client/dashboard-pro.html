@@ -139,6 +139,38 @@
         #toast.error { background: #3a1e1e; border-color: #e74c3c; color: #e74c3c; }
 
         .logo { color: white; font-size: 1.1rem; font-weight: bold; }
+
+        /* ── ANNONCES ───────────────────────────── */
+        .ann-row {
+            border: 1px solid #2a2a2a; border-radius: 6px;
+            padding: 12px 14px; margin-bottom: 10px; transition: opacity 0.2s;
+        }
+        .ann-row.inactive { opacity: 0.45; }
+        .ann-row-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+        .ann-row-title { font-size: 0.85rem; font-weight: bold; }
+        .ann-row-meta  { font-size: 0.73rem; color: #666; margin-top: 3px; }
+        .ann-row-body  { font-size: 0.8rem; color: #aaa; margin-top: 5px; }
+        .ann-row-actions { display: flex; gap: 5px; flex-shrink: 0; }
+        .ann-btn {
+            border-radius: 4px; padding: 4px 9px; font-size: 0.72rem; cursor: pointer;
+            border: 1px solid currentColor;
+        }
+        .ann-btn-active   { background: #1a3a1a; color: #2ecc71; }
+        .ann-btn-inactive { background: #333;    color: #888;    }
+        .ann-btn-pin      { background: #1a2a3a; color: #3498db; }
+        .ann-btn-nopin    { background: #333;    color: #666;    }
+        .ann-btn-del      { background: #3a1a1a; color: #e74c3c; }
+
+        select.form-select {
+            width: 100%; padding: 11px; margin-bottom: 13px;
+            background: #222; border: 1px solid #444; color: white;
+            border-radius: 5px; font-size: 0.88rem;
+        }
+        textarea.form-ta {
+            width: 100%; padding: 11px; margin-bottom: 13px;
+            background: #222; border: 1px solid #444; color: white;
+            border-radius: 5px; box-sizing: border-box; font-size: 0.88rem; resize: vertical;
+        }
     </style>
 </head>
 <body>
@@ -189,6 +221,9 @@
                 <div class="stat-card"><p style="margin:0;color:#888;font-size:0.8rem;">Volume Total Mises</p><div class="stat-val" id="statVolume">—</div></div>
                 <div class="stat-card"><p style="margin:0;color:#888;font-size:0.8rem;">Clubs Actifs</p><div class="stat-val" id="statClubs">—</div></div>
                 <div class="stat-card"><p style="margin:0;color:#888;font-size:0.8rem;">Commissions Wali</p><div class="stat-val" id="statComms" style="color:#4caf50;">—</div></div>
+                <div class="stat-card"><p style="margin:0;color:#888;font-size:0.8rem;">Joueurs Académie</p><div class="stat-val" id="statAcademy" style="color:#9b59b6;">—</div></div>
+                <div class="stat-card" title="Mis à jour toutes les 60s"><p style="margin:0;color:#888;font-size:0.8rem;">En Ligne ●</p><div class="stat-val" id="statOnline" style="color:#3498db;">—</div></div>
+                <div class="stat-card" title="Mis à jour toutes les 60s"><p style="margin:0;color:#888;font-size:0.8rem;">Tables Actives ●</p><div class="stat-val" id="statTablesLive" style="color:#e67e22;">—</div></div>
             </div>
 
             <!-- ── DEMANDES DE JETONS ───────────────────── -->
@@ -237,6 +272,56 @@
                         </thead>
                         <tbody id="katikaTableBody"></tbody>
                     </table>
+                </section>
+            </div>
+
+            <!-- ── ANNONCES ──────────────────────────────────── -->
+            <div class="admin-main" style="margin-top:20px;">
+                <section class="card">
+                    <h3>📢 NOUVELLE ANNONCE</h3>
+                    <form id="ann-form">
+                        <label style="font-size:0.7rem;color:#aaa;">TYPE</label>
+                        <select id="ann-type" class="form-select">
+                            <option value="INFO">ℹ️ Info</option>
+                            <option value="TOURNAMENT">🏆 Tournoi</option>
+                            <option value="PROMOTION">🎁 Promotion</option>
+                            <option value="MAINTENANCE">⚠️ Maintenance</option>
+                            <option value="UPDATE">🆕 Mise à jour</option>
+                            <option value="WARNING">🚨 Avertissement</option>
+                        </select>
+                        <label style="font-size:0.7rem;color:#aaa;">TITRE</label>
+                        <input type="text" id="ann-title" placeholder="Tournoi du vendredi soir" required>
+                        <label style="font-size:0.7rem;color:#aaa;">MESSAGE</label>
+                        <textarea id="ann-body" class="form-ta" rows="3" placeholder="Détails de l'annonce…" required></textarea>
+                        <label style="font-size:0.7rem;color:#aaa;">LIEN WHATSAPP (optionnel)</label>
+                        <input type="url" id="ann-wa" placeholder="https://chat.whatsapp.com/…">
+                        <label style="font-size:0.7rem;color:#aaa;">LIEN TELEGRAM (optionnel)</label>
+                        <input type="url" id="ann-tg" placeholder="https://t.me/…">
+                        <label style="font-size:0.7rem;color:#aaa;">LIEN DISCORD (optionnel)</label>
+                        <input type="url" id="ann-dc" placeholder="https://discord.gg/…">
+                        <div style="display:flex;gap:18px;align-items:center;margin-bottom:13px;flex-wrap:wrap;">
+                            <label style="font-size:0.75rem;color:#aaa;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                <input type="checkbox" id="ann-pinned" style="width:auto;margin:0;"> Épingler
+                            </label>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <label style="font-size:0.7rem;color:#aaa;">AUDIENCE</label>
+                                <select id="ann-audience" style="padding:8px;background:#222;border:1px solid #444;color:white;border-radius:5px;font-size:0.82rem;">
+                                    <option value="all">Tous</option>
+                                    <option value="players">Joueurs</option>
+                                    <option value="academy">Académie</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-gold">PUBLIER L'ANNONCE</button>
+                    </form>
+                    <div id="ann-error" style="color:#e74c3c;font-size:0.82rem;margin-top:8px;"></div>
+                </section>
+
+                <section class="card">
+                    <h3>📋 ANNONCES PUBLIÉES</h3>
+                    <div id="ann-list">
+                        <p style="color:#555;text-align:center;padding:20px 0;">Chargement…</p>
+                    </div>
                 </section>
             </div>
 

@@ -39,6 +39,14 @@ socket.on('notification:badge', ({ delta }) => {
     updateBadge(unreadCount);
 });
 
+// ── Stats live (socket) ───────────────────────────
+socket.on('visitor:stats', (s) => {
+    const onlineEl = document.getElementById('statOnline');
+    const tabEl    = document.getElementById('statTablesLive');
+    if (onlineEl) onlineEl.textContent = s.total_connected ?? '—';
+    if (tabEl)    tabEl.textContent    = s.active_tables   ?? '—';
+});
+
 // ── Init ──────────────────────────────────────────
 initAdmin();
 
@@ -46,6 +54,8 @@ async function initAdmin() {
     loadKatikaList();
     loadRecharges();
     loadNotifications();
+    loadAnnouncements();
+    loadDbStats();
 }
 
 // =====================================================
@@ -284,6 +294,122 @@ async function transferToKatika(id, amount) {
         if (r.ok) { showToast('Dotation effectuée !'); loadKatikaList(); }
         else       { showToast('Échec du transfert.', true); }
     } catch { showToast('Erreur serveur.', true); }
+}
+
+// =====================================================
+// STATS DB (volume, commissions, académie)
+// =====================================================
+
+async function loadDbStats() {
+    if (user.role !== 'superadmin') return;
+    try {
+        const r = await apiFetch('/api/admin/stats');
+        if (!r.ok) return;
+        const s = await r.json();
+        const vol  = document.getElementById('statVolume');
+        const com  = document.getElementById('statComms');
+        const acad = document.getElementById('statAcademy');
+        if (vol)  vol.textContent  = Math.round(s.total_volume  || 0).toLocaleString('fr-FR') + ' F';
+        if (com)  com.textContent  = Math.round(s.total_commissions || 0).toLocaleString('fr-FR') + ' F';
+        if (acad) acad.textContent = s.academy_players ?? '—';
+    } catch { /* silencieux */ }
+}
+
+// =====================================================
+// ANNONCES CRUD
+// =====================================================
+
+const ANN_META = {
+    INFO:        { icon: 'ℹ️',  color: '#3498db' },
+    TOURNAMENT:  { icon: '🏆',  color: '#e67e22' },
+    PROMOTION:   { icon: '🎁',  color: '#2ecc71' },
+    MAINTENANCE: { icon: '⚠️',  color: '#e74c3c' },
+    UPDATE:      { icon: '🆕',  color: '#9b59b6' },
+    WARNING:     { icon: '🚨',  color: '#f39c12' }
+};
+
+async function loadAnnouncements() {
+    const container = document.getElementById('ann-list');
+    try {
+        const r = await apiFetch('/api/announcements/admin');
+        if (!r.ok) return;
+        const { announcements } = await r.json();
+        renderAnnList(announcements);
+    } catch {
+        if (container) container.innerHTML = '<p style="color:#e74c3c;text-align:center;">Erreur chargement.</p>';
+    }
+}
+
+function renderAnnList(anns) {
+    const container = document.getElementById('ann-list');
+    if (!container) return;
+    if (!anns || anns.length === 0) {
+        container.innerHTML = '<p style="color:#555;text-align:center;padding:20px 0;">Aucune annonce publiée.</p>';
+        return;
+    }
+    container.innerHTML = anns.map(ann => {
+        const meta = ANN_META[ann.announcement_type] || ANN_META.INFO;
+        return `
+        <div class="ann-row${ann.is_active ? '' : ' inactive'}" style="border-left:3px solid ${meta.color}">
+            <div class="ann-row-top">
+                <div>
+                    <div class="ann-row-title" style="color:${meta.color}">${meta.icon} ${ann.title}${ann.pinned ? ' <span style="font-size:0.7rem;background:#333;padding:2px 6px;border-radius:4px;">📌</span>' : ''}</div>
+                    <div class="ann-row-meta">${ann.announcement_type} · ${ann.target_audience} · ${new Date(ann.created_at).toLocaleDateString('fr-FR')}</div>
+                    <div class="ann-row-body">${ann.body.length > 90 ? ann.body.substring(0, 90) + '…' : ann.body}</div>
+                </div>
+                <div class="ann-row-actions">
+                    <button class="ann-btn ${ann.is_active ? 'ann-btn-active' : 'ann-btn-inactive'}" onclick="toggleAnn(${ann.id}, 'is_active', ${!ann.is_active})">${ann.is_active ? '● Actif' : '○ Inactif'}</button>
+                    <button class="ann-btn ${ann.pinned ? 'ann-btn-pin' : 'ann-btn-nopin'}" onclick="toggleAnn(${ann.id}, 'pinned', ${!ann.pinned})">${ann.pinned ? '📌 Épinglé' : '📌 Épingler'}</button>
+                    <button class="ann-btn ann-btn-del" onclick="deleteAnn(${ann.id})">✕</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+document.getElementById('ann-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('ann-error');
+    errEl.textContent = '';
+
+    const payload = {
+        announcement_type:  document.getElementById('ann-type').value,
+        title:              document.getElementById('ann-title').value.trim(),
+        body:               document.getElementById('ann-body').value.trim(),
+        channel_whatsapp:   document.getElementById('ann-wa').value.trim() || null,
+        channel_telegram:   document.getElementById('ann-tg').value.trim() || null,
+        channel_discord:    document.getElementById('ann-dc').value.trim() || null,
+        pinned:             document.getElementById('ann-pinned').checked,
+        target_audience:    document.getElementById('ann-audience').value
+    };
+
+    if (!payload.title || !payload.body) { errEl.textContent = 'Titre et message sont requis.'; return; }
+
+    try {
+        const r = await apiFetch('/api/announcements', 'POST', payload);
+        const data = await r.json();
+        if (!r.ok) { errEl.textContent = data.msg || 'Erreur.'; return; }
+        document.getElementById('ann-form').reset();
+        showToast('Annonce publiée !');
+        loadAnnouncements();
+    } catch { errEl.textContent = 'Erreur réseau.'; }
+});
+
+async function toggleAnn(id, field, value) {
+    try {
+        const r = await apiFetch(`/api/announcements/${id}`, 'PUT', { [field]: value });
+        if (r.ok) loadAnnouncements();
+        else { const d = await r.json(); showToast(d.msg || 'Erreur.', true); }
+    } catch { showToast('Erreur réseau.', true); }
+}
+
+async function deleteAnn(id) {
+    if (!confirm('Supprimer cette annonce ?')) return;
+    try {
+        const r = await apiFetch(`/api/announcements/${id}`, 'DELETE');
+        if (r.ok) { showToast('Annonce supprimée.'); loadAnnouncements(); }
+        else { const d = await r.json(); showToast(d.msg || 'Erreur.', true); }
+    } catch { showToast('Erreur réseau.', true); }
 }
 
 // =====================================================

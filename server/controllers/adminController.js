@@ -1,5 +1,24 @@
 const db = require('../config/db');
 
+// GET /api/admin/stats — Métriques globales superadmin
+exports.getStats = async (req, res) => {
+    try {
+        const { rows } = await db.query(`
+            SELECT
+                COALESCE((SELECT SUM(ABS(amount)) FROM transactions WHERE type = 'mise'), 0)  AS total_volume,
+                COALESCE((SELECT SUM(amount)       FROM commissions  WHERE status = 'paid'), 0) AS total_commissions,
+                (SELECT COUNT(*) FROM clubs WHERE id > 0)                                       AS total_clubs,
+                (SELECT COUNT(*) FROM users WHERE role = 'player' AND status = 'active')        AS total_players,
+                (SELECT COUNT(*) FROM academy_wallets)                                          AS academy_players,
+                COALESCE((SELECT SUM(total_granted) FROM academy_wallets), 0)                   AS total_jetons_granted
+        `);
+        res.json(rows[0]);
+    } catch (err) {
+        console.error('[getStats]', err.message);
+        res.status(500).json({ msg: 'Erreur serveur.' });
+    }
+};
+
 // GET /api/admin/users — Liste des utilisateurs filtrée par rôle
 exports.getUsers = async (req, res) => {
     const { role: actorRole, club_id: actorClub } = req.user;

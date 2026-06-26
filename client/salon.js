@@ -1,22 +1,25 @@
 // =====================================================
-// FAP FAP 2.0 — Salon de jeu — Entrée libre
+// FAP FAP 2.1 — Salon de jeu — Entrée libre
 // Visiteurs anonymes autorisés — JWT optionnel
 // =====================================================
 
-const token   = localStorage.getItem('token');
-const user    = (() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } })();
-const isAuth  = !!(token && user);
-let   myWallet = isAuth ? (parseFloat(user.wallet) || 0) : 0;
+const token  = localStorage.getItem('token');
+const user   = (() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } })();
+const isAuth = !!(token && user);
 
 localStorage.removeItem('salon_table_id');
 localStorage.removeItem('salon_observer');
 
-// ── Header dynamique ───────────────────────────────
+let myWallet         = isAuth ? (parseFloat(user.wallet) || 0) : 0;
+let myAcademyBalance = 0;
+
+// ── Header dynamique ──────────────────────────────
 const headerArea = document.getElementById('header-user-area');
 if (isAuth) {
     headerArea.innerHTML = `
         <span>Connecté : <strong>${user.username}</strong></span>
         <span id="wallet-display">${myWallet.toLocaleString()} FCFA</span>
+        <span id="jetons-display" title="Solde Académie — cliquer pour voir l'historique" style="display:none">0 🎫</span>
         <span id="rs-badge-slot"></span>
         <button class="btn-logout" onclick="logout()">Déconnexion</button>`;
     document.getElementById('visitor-banner').style.display = 'none';
@@ -24,31 +27,26 @@ if (isAuth) {
     headerArea.innerHTML = `
         <span style="color:#888">Mode Observateur</span>
         <button style="background:transparent;border:1px solid #555;color:#aaa;border-radius:6px;padding:6px 14px;font-size:0.8rem;cursor:pointer;" onclick="openModalLogin()">Se connecter</button>
-        <button id="btn-want-play-header" style="background:var(--gold);color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:0.8rem;font-weight:bold;cursor:pointer;" onclick="openModalRegister()">S'inscrire</button>`;
+        <button style="background:var(--gold);color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:0.8rem;font-weight:bold;cursor:pointer;" onclick="openModalRegister()">S'inscrire</button>`;
     document.getElementById('visitor-banner').style.display = 'flex';
 }
 
-// Panel admin visible si superadmin ou katika
 if (isAuth && (user.role === 'superadmin' || user.role === 'katika')) {
     document.getElementById('admin-panel').classList.add('visible');
 }
 
-// Table sélectionnée (pour les modals)
-let selectedTable   = null;
-let selectedAmount  = 0;
+let selectedTable  = null;
+let selectedAmount = 0;
 
 // =====================================================
-// CONNEXION SOCKET
+// SOCKET
 // =====================================================
 
 const socket = io(BACKEND_URL);
 
 socket.on('connect', () => {
     setStatus(true);
-
-    // Authentifier via Socket.IO si token disponible
     if (token) socket.emit('authenticate', token);
-
     socket.emit('join-salon');
 
     const params = new URLSearchParams(window.location.search);
@@ -63,20 +61,9 @@ socket.on('connect', () => {
 
 socket.on('disconnect', () => setStatus(false));
 
-// Confirmation d'authentification socket — rafraîchir le wallet
-socket.on('authenticated', () => {
-    refreshWalletDisplay();
-});
-
-// =====================================================
-// ÉTAT DU SALON
-// =====================================================
+socket.on('authenticated', () => refreshWalletDisplay());
 
 socket.on('salon-state', (tables) => renderTables(tables));
-
-// =====================================================
-// ATTRIBUTION AUTOMATIQUE
-// =====================================================
 
 socket.on('auto-assigned', (data) => {
     if (data.error) {
@@ -86,29 +73,18 @@ socket.on('auto-assigned', (data) => {
     openSitModal({ table_id: data.salon_table_id, table_name: data.table_name, min_bet: data.min_bet });
 });
 
-// =====================================================
-// INVITATION PAR LIEN
-// =====================================================
-
 socket.on('invite-resolved', (data) => {
     if (!data || data.error) { showToast('Lien d\'invitation invalide ou table fermée.', true); return; }
     openSitModal(data);
 });
 
-// =====================================================
-// NOTIFICATIONS JOUEUR (tokens approuvés/rejetés)
-// =====================================================
-
 socket.on('tokens:approved', ({ new_balance, amount }) => {
     myWallet = new_balance;
-    if (isAuth) {
-        const disp = document.getElementById('wallet-display');
-        if (disp) disp.textContent = myWallet.toLocaleString() + ' FCFA';
-        // Mettre à jour le localStorage
-        const u = JSON.parse(localStorage.getItem('user') || '{}');
-        u.wallet = new_balance;
-        localStorage.setItem('user', JSON.stringify(u));
-    }
+    const disp = document.getElementById('wallet-display');
+    if (disp) disp.textContent = myWallet.toLocaleString() + ' FCFA';
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    u.wallet = new_balance;
+    localStorage.setItem('user', JSON.stringify(u));
     showToast(`Jetons validés ! +${amount.toLocaleString()} FCFA — Vous pouvez maintenant vous asseoir.`);
 });
 
@@ -116,83 +92,254 @@ socket.on('tokens:rejected', ({ reason }) => {
     showToast(`Demande refusée : ${reason}`, true);
 });
 
+socket.on('academy:daily-claimed', ({ granted, new_balance }) => {
+    myAcademyBalance = new_balance;
+    updateAcademyWidget(false);
+    showToast(`+${granted.toLocaleString()} JETONS ajoutés ! Bonne chance à l'Académie.`);
+});
+
 // =====================================================
-// RENDU DES TABLES
+// RENDU DES TABLES — SÉPARÉ ACADÉMIE / RÉEL
 // =====================================================
 
 function renderTables(tables) {
-    const grid    = document.getElementById('tables-grid');
-    const loading = document.getElementById('loading-msg');
-
     if (!tables || tables.length === 0) {
-        loading.style.display = 'block';
-        loading.innerText = 'Aucune table disponible pour le moment.';
-        grid.style.display = 'none';
+        showSection('academy', []);
+        showSection('real', []);
         return;
     }
 
-    loading.style.display = 'none';
-    grid.style.display = 'grid';
-    grid.innerHTML = '';
+    const academyTables = tables.filter(t => (t.table_type || 'real') === 'academy');
+    const realTables    = tables.filter(t => (t.table_type || 'real') !== 'academy');
 
-    tables.forEach(t => {
-        const card     = document.createElement('div');
-        card.className = `table-card status-${t.status}`;
+    showSection('academy', academyTables);
+    showSection('real',    realTables);
+}
 
-        const seated    = Array.isArray(t.seated_players) ? t.seated_players : [];
-        const obs       = Array.isArray(t.observers)      ? t.observers      : [];
-        const maxP      = t.max_players || 4;
-        const livePl    = t.live_players !== undefined ? t.live_players : seated.length;
-        const avail     = maxP - livePl;
-        const isPlaying = t.status === 'playing';
-        const isFull    = avail <= 0;
+function showSection(type, tables) {
+    const section  = document.getElementById(`section-${type}`);
+    const grid     = document.getElementById(`grid-${type}`);
+    const loading  = document.getElementById(`loading-${type}`);
+    const noTables = document.getElementById(`no-${type}`);
 
-        const seatsHtml   = Array.from({ length: maxP }, (_, i) =>
-            `<div class="seat-dot ${i < livePl ? 'taken' : 'free'}"></div>`).join('');
-        const playersHtml = seated.length
-            ? seated.map(p => `<span class="player-chip">${p.username}</span>`).join('')
-            : '<em>Aucun joueur</em>';
-        const obsText = obs.length ? `${obs.length} observateur${obs.length > 1 ? 's' : ''}` : '';
+    section.style.display = 'block';
+    loading.style.display  = 'none';
 
-        // Bouton s'asseoir — comportement différent selon l'état
-        let sitLabel, sitDisabled, sitOnclick;
-        if (isPlaying) {
-            sitLabel = 'Partie en cours'; sitDisabled = 'disabled'; sitOnclick = '';
-        } else if (isFull) {
-            sitLabel = 'Complet'; sitDisabled = 'disabled'; sitOnclick = '';
-        } else if (!isAuth) {
-            sitLabel = 'Je veux jouer'; sitDisabled = '';
-            sitOnclick = `onclick="openModalRegister()"`;
+    if (!tables.length) {
+        grid.style.display     = 'none';
+        noTables.style.display = 'block';
+        return;
+    }
+
+    noTables.style.display = 'none';
+    grid.style.display     = 'grid';
+    grid.innerHTML         = '';
+
+    tables.forEach(t => grid.appendChild(buildCard(t)));
+}
+
+function buildCard(t) {
+    const isAcademy   = (t.table_type || 'real') === 'academy';
+    const currency    = t.currency || (isAcademy ? 'JETONS' : 'FCFA');
+    const seated      = Array.isArray(t.seated_players) ? t.seated_players : [];
+    const obs         = Array.isArray(t.observers)      ? t.observers      : [];
+    const maxP        = t.max_players || 4;
+    const livePl      = t.live_players !== undefined ? t.live_players : seated.length;
+    const avail       = maxP - livePl;
+    const isPlaying   = t.status === 'playing';
+    const isFull      = avail <= 0;
+    const isReady     = !isPlaying && livePl >= 1; // quelqu'un attend déjà
+
+    const card = document.createElement('div');
+    card.className = `table-card status-${t.status}${isAcademy ? ' academy' : ''}`;
+
+    const seatsHtml = Array.from({ length: maxP }, (_, i) =>
+        `<div class="seat-dot ${i < livePl ? 'taken' : 'free'}${isAcademy ? ' academy' : ''}"></div>`
+    ).join('');
+
+    const playersHtml = seated.length
+        ? seated.map(p => `<span class="player-chip">${p.username}</span>`).join('')
+        : '<em style="color:#555">Aucun joueur</em>';
+
+    const obsText = obs.length ? ` · ${obs.length} observateur${obs.length > 1 ? 's' : ''}` : '';
+
+    // Bouton s'asseoir
+    let sitLabel, sitDisabled, sitOnclick, sitClass;
+    sitClass = isAcademy ? 'btn-sit-table academy' : 'btn-sit-table';
+    if (isPlaying) {
+        sitLabel = 'Partie en cours'; sitDisabled = 'disabled'; sitOnclick = '';
+    } else if (isFull) {
+        sitLabel = 'Complet'; sitDisabled = 'disabled'; sitOnclick = '';
+    } else if (!isAuth) {
+        sitLabel = 'Je veux jouer'; sitDisabled = '';
+        sitOnclick = `onclick="openModalRegister()"`;
+    } else {
+        sitLabel = 'S\'asseoir'; sitDisabled = '';
+        sitOnclick = `onclick='openSitModal(${JSON.stringify(t)})'`;
+    }
+
+    // Badge statut
+    let badgeHtml;
+    if (isPlaying) {
+        badgeHtml = `<span class="table-status-badge badge-playing">En cours</span>`;
+    } else if (isReady) {
+        badgeHtml = `<span class="table-status-badge badge-ready">🟢 Prêt</span>`;
+    } else {
+        badgeHtml = `<span class="table-status-badge badge-open">Libre</span>`;
+    }
+
+    card.innerHTML = `
+        <div class="table-card-header">
+            <span class="table-card-name">${t.table_name}</span>
+            ${badgeHtml}
+        </div>
+        <div class="table-card-info">
+            <span>Mise min : <strong>${parseFloat(t.min_bet).toLocaleString()} ${currency}</strong></span>
+            <span>Places : <strong>${livePl}/${maxP}</strong>${obsText}</span>
+            ${t.club_name ? `<span>Club : <strong>${t.club_name}</strong></span>` : ''}
+            ${isReady ? `<span class="immediately-tag">▶ Jouable immédiatement</span>` : ''}
+        </div>
+        <div class="seats-bar">${seatsHtml}</div>
+        <div class="players-list">${playersHtml}</div>
+        <div class="table-card-actions">
+            <button class="${sitClass}" ${sitDisabled} ${sitOnclick}>${sitLabel}</button>
+            <button class="btn-observe" onclick='openObserveModal(${JSON.stringify(t)})'>Observer</button>
+        </div>`;
+
+    return card;
+}
+
+// =====================================================
+// ANNONCES
+// =====================================================
+
+const TYPE_META = {
+    INFO:        { color: '#3498db', icon: 'ℹ️'  },
+    TOURNAMENT:  { color: '#e67e22', icon: '🏆'  },
+    PROMOTION:   { color: '#2ecc71', icon: '🎁'  },
+    MAINTENANCE: { color: '#e74c3c', icon: '⚠️'  },
+    UPDATE:      { color: '#9b59b6', icon: '🆕'  },
+    WARNING:     { color: '#f39c12', icon: '🚨'  }
+};
+
+async function loadAnnouncements() {
+    try {
+        const r = await fetch(BACKEND_URL + '/api/announcements');
+        if (!r.ok) return;
+        const { announcements } = await r.json();
+        if (!announcements?.length) return;
+
+        const zone = document.getElementById('announcements-zone');
+        zone.innerHTML = '';
+        announcements.forEach(ann => {
+            const meta  = TYPE_META[ann.announcement_type] || TYPE_META.INFO;
+            const links = [
+                ann.channel_whatsapp && { label: 'WhatsApp', url: ann.channel_whatsapp },
+                ann.channel_telegram && { label: 'Telegram', url: ann.channel_telegram },
+                ann.channel_discord  && { label: 'Discord',  url: ann.channel_discord  },
+                ann.channel_facebook && { label: 'Facebook', url: ann.channel_facebook }
+            ].filter(Boolean);
+
+            const linksHtml = links.map(l =>
+                `<a class="ann-link" href="${l.url}" target="_blank" rel="noopener"
+                    style="color:${meta.color};border-color:${meta.color}30">${l.label}</a>`
+            ).join(' ');
+
+            const card = document.createElement('div');
+            card.className = 'announcement-card';
+            card.style.borderColor = meta.color;
+            card.innerHTML = `
+                <div class="ann-icon">${meta.icon}</div>
+                <div class="ann-body">
+                    <div class="ann-title" style="color:${meta.color}">
+                        ${ann.title}
+                        ${ann.pinned ? '<span class="ann-pinned-badge">📌 Épinglé</span>' : ''}
+                    </div>
+                    <div class="ann-text">${ann.body}</div>
+                    ${linksHtml}
+                </div>`;
+            zone.appendChild(card);
+        });
+    } catch { /* silencieux — les annonces sont non critiques */ }
+}
+
+socket.on('announcement:new', (ann) => {
+    loadAnnouncements();
+});
+
+// =====================================================
+// WALLET ACADÉMIE
+// =====================================================
+
+async function loadAcademyWallet() {
+    if (!token) return;
+    try {
+        const r = await fetch(BACKEND_URL + '/api/academy/wallet', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!r.ok) return;
+        const data = await r.json();
+        myAcademyBalance = data.balance || 0;
+        updateAcademyWidget(data.can_claim, data.next_grant);
+    } catch { /* silencieux */ }
+}
+
+function updateAcademyWidget(canClaim, nextGrant) {
+    const widget  = document.getElementById('academy-wallet-widget');
+    const balEl   = document.getElementById('academy-balance-val');
+    const btnEl   = document.getElementById('btn-claim-daily');
+    const timerEl = document.getElementById('claim-timer');
+    const jEl     = document.getElementById('jetons-display');
+
+    if (!widget) return;
+    widget.style.display = 'flex';
+
+    if (balEl) balEl.textContent = myAcademyBalance.toLocaleString('fr-FR') + ' 🎫';
+    if (jEl)  { jEl.style.display = 'inline'; jEl.textContent = myAcademyBalance.toLocaleString('fr-FR') + ' 🎫'; }
+
+    if (btnEl) {
+        if (canClaim) {
+            btnEl.style.display = 'inline-block';
+            btnEl.disabled      = false;
+            if (timerEl) timerEl.style.display = 'none';
         } else {
-            sitLabel = 'S\'asseoir'; sitDisabled = '';
-            sitOnclick = `onclick='openSitModal(${JSON.stringify(t)})'`;
+            btnEl.style.display = 'none';
+            if (timerEl && nextGrant) {
+                const next = new Date(nextGrant);
+                timerEl.style.display = 'inline';
+                timerEl.textContent   = `Disponible à ${next.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (timerEl) {
+                timerEl.style.display = 'none';
+            }
+        }
+    }
+}
+
+async function claimDailyGrant() {
+    const btn = document.getElementById('btn-claim-daily');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+    try {
+        const r = await fetch(BACKEND_URL + '/api/academy/daily-grant', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await r.json();
+
+        if (!r.ok) {
+            showToast(data.msg || 'Impossible de récupérer les jetons.', true);
+            if (data.next_grant) updateAcademyWidget(false, data.next_grant);
+            else if (btn) { btn.disabled = false; btn.textContent = '+ 10 000 JETONS'; }
+            return;
         }
 
-        card.innerHTML = `
-            <div class="table-card-header">
-                <span class="table-card-name">${t.table_name}</span>
-                <span class="table-status-badge badge-${t.status}">
-                    ${t.status === 'playing' ? 'En cours' : 'Libre'}
-                </span>
-            </div>
-            <div class="table-card-info">
-                <span>Mise min : <strong>${t.min_bet} FCFA</strong></span>
-                <span>Places : <strong>${livePl}/${maxP}</strong>${obsText ? ` · ${obsText}` : ''}</span>
-                ${t.club_name ? `<span>Club : <strong>${t.club_name}</strong></span>` : ''}
-            </div>
-            <div class="seats-bar">${seatsHtml}</div>
-            <div class="players-list">${playersHtml}</div>
-            <div class="table-card-actions">
-                <button class="btn-sit-table" ${sitDisabled} ${sitOnclick}>
-                    ${sitLabel}
-                </button>
-                <button class="btn-observe" onclick='openObserveModal(${JSON.stringify(t)})'>
-                    Observer
-                </button>
-            </div>`;
-
-        grid.appendChild(card);
-    });
+        myAcademyBalance = data.new_balance;
+        updateAcademyWidget(false, null);
+        showToast(`+${data.granted.toLocaleString()} JETONS ajoutés !`);
+    } catch {
+        showToast('Erreur réseau.', true);
+        if (btn) { btn.disabled = false; btn.textContent = '+ 10 000 JETONS'; }
+    }
 }
 
 // =====================================================
@@ -202,9 +349,15 @@ function renderTables(tables) {
 function openSitModal(table) {
     if (!isAuth) { openModalRegister(); return; }
     selectedTable = table;
-    document.getElementById('modal-sit-title').innerText  = `S'asseoir — ${table.table_name}`;
-    document.getElementById('modal-sit-bet').innerText    = parseFloat(table.min_bet).toLocaleString();
-    document.getElementById('modal-sit-wallet').innerText = myWallet.toLocaleString();
+    const isAcademy = (table.table_type || 'real') === 'academy';
+    const currency  = table.currency || (isAcademy ? 'JETONS' : 'FCFA');
+    const balance   = isAcademy ? myAcademyBalance : myWallet;
+
+    document.getElementById('modal-sit-title').innerText          = `S'asseoir — ${table.table_name}`;
+    document.getElementById('modal-sit-bet').innerText            = parseFloat(table.min_bet).toLocaleString('fr-FR');
+    document.getElementById('modal-sit-currency').innerText       = currency;
+    document.getElementById('modal-sit-wallet').innerText         = balance.toLocaleString('fr-FR');
+    document.getElementById('modal-sit-wallet-currency').innerText = currency;
     document.getElementById('modal-sit').classList.add('open');
 }
 
@@ -227,13 +380,24 @@ function closeModalsAndReload() {
 
 function confirmSit() {
     if (!selectedTable) return;
-    if (myWallet < parseFloat(selectedTable.min_bet)) {
+    const isAcademy = (selectedTable.table_type || 'real') === 'academy';
+    const balance   = isAcademy ? myAcademyBalance : myWallet;
+
+    if (balance < parseFloat(selectedTable.min_bet)) {
         closeModals();
-        showToast('Solde insuffisant. Demandez des jetons à votre Katika.', true);
-        setTimeout(() => openModalTokens(), 1200);
+        if (isAcademy) {
+            showToast('Solde JETONS insuffisant. Récupérez votre crédit quotidien.', true);
+        } else {
+            showToast('Solde insuffisant. Demandez des jetons à votre Katika.', true);
+            setTimeout(() => openModalTokens(), 1200);
+        }
         return;
     }
-    localStorage.setItem('salon_table_id', selectedTable.table_id);
+
+    // Stocker la devise pour que game.js l'utilise
+    localStorage.setItem('salon_table_id',   selectedTable.table_id);
+    localStorage.setItem('table_currency',   selectedTable.currency || (isAcademy ? 'JETONS' : 'FCFA'));
+    localStorage.setItem('table_type',       selectedTable.table_type || 'real');
     localStorage.removeItem('salon_observer');
     closeModals();
     window.location.href = 'game.html';
@@ -241,7 +405,9 @@ function confirmSit() {
 
 function confirmObserve() {
     if (!selectedTable) return;
-    localStorage.setItem('salon_table_id', selectedTable.table_id);
+    localStorage.setItem('salon_table_id',  selectedTable.table_id);
+    localStorage.setItem('table_currency',  selectedTable.currency || 'FCFA');
+    localStorage.setItem('table_type',      selectedTable.table_type || 'real');
     localStorage.setItem('salon_observer', '1');
     socket.emit('observe-table', {
         salon_table_id: selectedTable.table_id,
@@ -261,12 +427,14 @@ function openModalRegister() {
 }
 
 async function submitRegister() {
-    const phone  = document.getElementById('reg-phone').value.trim();
-    const uname  = document.getElementById('reg-username').value.trim();
-    const pass   = document.getElementById('reg-password').value;
-    const pass2  = document.getElementById('reg-password2').value;
+    const phone     = document.getElementById('reg-phone').value.trim();
+    const uname     = document.getElementById('reg-username').value.trim();
+    const pass      = document.getElementById('reg-password').value;
+    const pass2     = document.getElementById('reg-password2').value;
+    const firstName = document.getElementById('reg-firstname').value.trim() || undefined;
+    const lastName  = document.getElementById('reg-lastname').value.trim()  || undefined;
 
-    if (!phone || !uname || !pass) { setError('reg', 'Tous les champs sont requis.'); return; }
+    if (!phone || !uname || !pass) { setError('reg', 'Téléphone, sobriquet et mot de passe sont requis.'); return; }
     if (pass !== pass2)            { setError('reg', 'Les mots de passe ne correspondent pas.'); return; }
     if (uname.length < 2)          { setError('reg', 'Le sobriquet doit contenir au moins 2 caractères.'); return; }
     if (pass.length < 6)           { setError('reg', 'Mot de passe trop court (6 caractères minimum).'); return; }
@@ -275,29 +443,23 @@ async function submitRegister() {
         const r = await fetch(BACKEND_URL + '/api/auth/register-or-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, username: uname, password: pass })
+            body: JSON.stringify({ phone, username: uname, password: pass, first_name: firstName, last_name: lastName })
         });
         const data = await r.json();
 
         if (!r.ok) { setError('reg', data.msg || 'Erreur lors de l\'inscription.'); return; }
 
         if (!data.isNew) {
-            // Numéro déjà existant → proposer connexion
             setError('reg', 'Ce numéro est déjà enregistré. Connectez-vous à la place.');
             return;
         }
 
-        // Succès — stocker le token et rafraîchir
         localStorage.setItem('token', data.token);
         localStorage.setItem('user',  JSON.stringify(data.user));
         closeModals();
-        showToast('Compte créé ! Bienvenue ' + data.user.username);
-
-        // Reconnexion Socket.IO authentifiée
+        showToast('Compte créé ! Bienvenue ' + data.user.username + ' — 10 000 JETONS offerts 🎫');
         socket.emit('authenticate', data.token);
-
-        // Proposer la demande de jetons après le toast
-        setTimeout(() => openModalTokens(), 900);
+        setTimeout(() => window.location.reload(), 1500);
 
     } catch { setError('reg', 'Erreur réseau. Réessayez.'); }
 }
@@ -336,7 +498,7 @@ async function submitLogin() {
 }
 
 // =====================================================
-// MODAL : DEMANDE DE JETONS
+// MODAL : DEMANDE DE JETONS (FCFA)
 // =====================================================
 
 function openModalTokens() {
@@ -373,10 +535,7 @@ async function submitTokenRequest() {
     try {
         const r = await fetch(BACKEND_URL + '/api/money/recharge', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + currentToken
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentToken },
             body: JSON.stringify({ amount, note: note || undefined })
         });
         const data = await r.json();
@@ -396,7 +555,7 @@ async function submitTokenRequest() {
 
 function createTable() {
     const name        = document.getElementById('new-table-name').value.trim();
-    const min_bet     = parseInt(document.getElementById('new-table-bet').value) || 100;
+    const min_bet     = parseInt(document.getElementById('new-table-bet').value)     || 100;
     const max_players = parseInt(document.getElementById('new-table-players').value) || 4;
 
     if (!name) { showToast('Donnez un nom à la table.', true); return; }
@@ -416,7 +575,7 @@ function createTable() {
 }
 
 // =====================================================
-// WALLET — RAFRAÎCHIR DEPUIS LA BDD
+// WALLET FCFA — RAFRAÎCHIR DEPUIS LA BDD
 // =====================================================
 
 async function refreshWalletDisplay() {
@@ -461,7 +620,7 @@ function showToast(msg, isError = false) {
     t.className   = isError ? 'error' : '';
     t.style.display = 'block';
     clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+    window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 4500);
 }
 
 function logout() {
@@ -476,5 +635,16 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModals(); });
 });
 
-// Rafraîchir le wallet au chargement si connecté
-if (isAuth) refreshWalletDisplay();
+// =====================================================
+// INIT AU CHARGEMENT
+// =====================================================
+
+loadAnnouncements();
+if (isAuth) {
+    refreshWalletDisplay();
+    loadAcademyWallet().then(() => {
+        // Afficher le widget uniquement si connecté
+        const w = document.getElementById('academy-wallet-widget');
+        if (w) w.style.display = 'flex';
+    });
+}

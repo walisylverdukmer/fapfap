@@ -248,3 +248,57 @@ button:hover, .btn-action:hover, .btn-special:hover {
 .scroll-area::-webkit-scrollbar-track { background: #f1f1f1; }
 .scroll-area::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
 
+/* =====================================================
+   FAP FAP 2.1 — Global Responsive Media Queries
+   4 breakpoints : 1400+ / 1100 / 768 / 480
+   ===================================================== */
+
+/* ── ≥1400px : Grand écran ──────────────────────── */
+@media (min-width: 1400px) {
+    .side-column  { width: 320px; }
+    .main-wrapper { min-height: calc(100vh - 100px); }
+}
+
+/* ── ≤1100px : Desktop compact ─────────────────── */
+@media (max-width: 1100px) {
+    .navbar-pro  { padding: 0 14px; }
+    .nav-links   { gap: 6px; padding: 8px 14px; }
+    .nav-link    { font-size: 0.78rem; padding: 5px 9px; }
+    .side-column { width: 240px; }
+}
+
+/* ── ≤768px : Tablette / Mobile ─────────────────── */
+@media (max-width: 768px) {
+    .navbar-pro {
+        padding: 0 10px;
+        height: 52px;
+    }
+    .nav-links {
+        gap: 4px;
+        padding: 6px 10px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .nav-links::-webkit-scrollbar { display: none; }
+    .nav-link { font-size: 0.72rem; padding: 5px 8px; flex-shrink: 0; }
+
+    button, .btn-action, .btn-special, .btn-sit, .btn-send { font-size: 0.75rem; }
+
+    /* Panneau latéral caché — les pages gèrent leurs propres drawers */
+    .side-column { display: none; }
+
+    .main-wrapper   { height: auto; }
+    .game-container { align-items: flex-start; padding-top: 10px; }
+}
+
+/* ── ≤480px : Mobile petit ──────────────────────── */
+@media (max-width: 480px) {
+    .navbar-pro { padding: 0 8px; height: 48px; }
+    .nav-link   { font-size: 0.68rem; padding: 4px 7px; }
+    .btn-logout { padding: 4px 10px; font-size: 0.72rem; }
+
+    button, .btn-action { font-size: 0.7rem; }
+}
+

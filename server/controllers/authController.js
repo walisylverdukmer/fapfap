@@ -118,7 +118,7 @@ exports.checkPhone = async (req, res) => {
 
 // --- 4. INSCRIPTION OU CONNEXION VIA /play (auto-detect) ---
 exports.registerOrLogin = async (req, res) => {
-    const { phone, username, password } = req.body;
+    const { phone, username, password, first_name: firstName = null, last_name: lastName = null } = req.body;
 
     if (!phone || !password) {
         return res.status(400).json({ msg: 'Téléphone et mot de passe requis.' });
@@ -170,14 +170,42 @@ exports.registerOrLogin = async (req, res) => {
         const salt           = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        const { rows: newRows } = await db.query(
-            `INSERT INTO users (username, phone, password, role, wallet, club_id)
-             VALUES ($1, $2, $3, 'player', 0, $4)
-             RETURNING id, username, role, phone, wallet, club_id`,
-            [username.trim(), phone, hashedPassword, publicClubId]
-        );
-        const user = newRows[0];
-        await db.query('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
+        const client = await db.connect();
+        let user;
+        try {
+            await client.query('BEGIN');
+
+            const { rows: newRows } = await client.query(
+                `INSERT INTO users (username, phone, password, role, wallet, club_id, first_name, last_name)
+                 VALUES ($1, $2, $3, 'player', 0, $4, $5, $6)
+                 RETURNING id, username, role, phone, wallet, club_id`,
+                [username.trim(), phone, hashedPassword, publicClubId,
+                 firstName?.trim() || null, lastName?.trim() || null]
+            );
+            user = newRows[0];
+
+            await client.query(
+                `INSERT INTO academy_wallets
+                    (user_id, balance, last_daily_grant, total_granted)
+                 VALUES ($1, 10000, NOW(), 10000)`,
+                [user.id]
+            );
+
+            await client.query(
+                `INSERT INTO academy_transactions
+                    (user_id, transaction_type, amount, balance_before, balance_after, reference)
+                 VALUES ($1, 'INITIAL_GRANT', 10000, 0, 10000, 'Bienvenue sur FAP FAP — 10 000 JETONS offerts')`,
+                [user.id]
+            );
+
+            await client.query('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            client.release();
+            throw txErr;
+        }
+        client.release();
 
         const token = jwt.sign(
             { id: user.id, role: user.role, club_id: user.club_id },

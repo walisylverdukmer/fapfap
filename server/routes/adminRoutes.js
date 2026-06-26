@@ -4,6 +4,9 @@ const adminController = require('../controllers/adminController');
 const auth        = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 
+// Métriques globales
+router.get('/stats',               auth, requireRole('superadmin'),           adminController.getStats);
+
 // Lecture
 router.get('/users',               auth, requireRole('superadmin', 'katika'), adminController.getUsers);
 router.get('/sanctions',           auth, requireRole('superadmin', 'katika'), adminController.getSanctions);

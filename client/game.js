@@ -5,6 +5,9 @@ const socket = io(BACKEND_URL);
 const user = AuthGuard.getUser();
 const salonTableId  = parseInt(localStorage.getItem('salon_table_id')) || null;
 const isObserver    = localStorage.getItem('salon_observer') === '1';
+const tableCurrency = localStorage.getItem('table_currency') || 'FCFA';
+const tableType     = localStorage.getItem('table_type')     || 'real';
+const isAcademy     = tableType === 'academy';
 
 // --- VARIABLES GLOBALES ---
 let myHand = [];
@@ -80,14 +83,14 @@ socket.on('wallet-update', (data) => {
     
     // Mise à jour visuelle avec effet flash vert
     if(walletEl) {
-        walletEl.innerText = data.balance + " FCFA";
-        walletEl.style.color = "#27ae60"; 
+        walletEl.innerText = data.balance + " " + tableCurrency;
+        walletEl.style.color = "#27ae60";
         setTimeout(() => { walletEl.style.color = "white"; }, 1000);
     }
 
     // Alerte si solde trop bas
     if (data.balance < user.stake) {
-        showAnnouncement(`⚠️ SOLDE INSUFFISANT (${data.balance} FCFA) !`, 5000);
+        showAnnouncement(`⚠️ SOLDE INSUFFISANT (${data.balance} ${tableCurrency}) !`, 5000);
     }
 });
 
@@ -173,7 +176,7 @@ socket.on('player-list-update', (players) => {
         if(myWalletEl) {
             // Sécurité pour afficher 0 si wallet est null
             const myAmount = (me.wallet !== undefined && me.wallet !== null) ? me.wallet : 0;
-            myWalletEl.innerText = myAmount + " FCFA";
+            myWalletEl.innerText = myAmount + " " + tableCurrency;
         }
 
         // Ajout du bouton REFRESH si pas déjà présent
@@ -207,8 +210,8 @@ socket.on('player-list-update', (players) => {
             const balDiv = document.getElementById(`bal-${currentSlot}`);
             if(balDiv) {
                 const amount = (p.wallet !== undefined && p.wallet !== null) ? p.wallet : 0;
-                balDiv.innerText = amount + " FCFA";
-                balDiv.style.color = "#f1c40f"; 
+                balDiv.innerText = amount + " " + tableCurrency;
+                balDiv.style.color = "#f1c40f";
             }
             slotIdx++;
         }
@@ -333,7 +336,7 @@ socket.on('game-started', (data) => {
     console.log("🚀 La partie commence !");
     clearBoard(); 
     currentDealerId = data.dealerId;
-    document.getElementById('total-pot').innerText = data.pot + " FCFA";
+    document.getElementById('total-pot').innerText = data.pot + " " + tableCurrency;
     document.getElementById('distribBtn').style.display = 'none';
     document.getElementById('status-msg').innerText = "La partie commence !";
     
@@ -457,7 +460,7 @@ socket.on('game-over', (data) => {
     if(modal) {
         document.getElementById('winner-name').innerText = data.winnerUsername;
         document.getElementById('winner-avatar').innerHTML = `<img src="${data.winnerAvatar}" style="width:100%">`;
-        document.getElementById('winner-gain').innerText = data.potAmount + " FCFA";
+        document.getElementById('winner-gain').innerText = data.potAmount + " " + tableCurrency;
         document.getElementById('status-msg').innerText = data.reason || "Partie terminée";
         modal.style.display = 'flex';
     }
@@ -687,7 +690,7 @@ function openChangeTableModal() {
                 return `
                     <div class="ct-row ${locked ? 'ct-locked' : ''}" ${click}>
                         <span class="ct-name">${t.table_name}${label}</span>
-                        <span class="ct-info">${t.seated_count || 0}/${t.max_players} · ${t.min_bet} FCFA</span>
+                        <span class="ct-info">${t.seated_count || 0}/${t.max_players} · ${t.min_bet} ${t.currency || 'FCFA'}</span>
                         ${badge}
                     </div>`;
             }).join('');

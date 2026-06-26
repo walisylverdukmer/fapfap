@@ -18,7 +18,9 @@ const moneyRoutes         = require('./routes/moneyRoutes');
 const authRoutes          = require('./routes/authRoutes');
 const adminRoutes         = require('./routes/adminRoutes');
 const salonRoutes         = require('./routes/salonRoutes');
-const notificationRoutes  = require('./routes/notificationRoutes');
+const notificationRoutes    = require('./routes/notificationRoutes');
+const academyRoutes         = require('./routes/academyRoutes');
+const announcementRoutes    = require('./routes/announcementRoutes');
 
 // Sprint 5 — CORS whitelist (remplace origin: "*")
 // Render injecte RENDER_EXTERNAL_URL automatiquement → auto-ajouté à la whitelist
@@ -47,7 +49,9 @@ app.use('/api/money',         moneyRoutes);
 app.use('/api/auth',          authRoutes);
 app.use('/api/admin',         adminRoutes);
 app.use('/api/salon',         salonRoutes);
-app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications',  notificationRoutes);
+app.use('/api/academy',        academyRoutes);
+app.use('/api/announcements',  announcementRoutes);
 
 // Empêche la mise en cache des pages HTML protégées (fix retour arrière après logout)
 app.use((req, res, next) => {
@@ -74,6 +78,16 @@ const TURN_TIMEOUT_MS  = parseInt(process.env.TURN_TIMEOUT_MS || '30000', 10);
 
 app.set('io', io);
 app.set('connectedSockets', connectedSockets);
+
+// Debounce broadcastSalonState — évite les rafales de requêtes SQL sur événements simultanés
+let _salonBroadcastTimer = null;
+function scheduleBroadcastSalonState() {
+    if (_salonBroadcastTimer) return;
+    _salonBroadcastTimer = setTimeout(() => {
+        _salonBroadcastTimer = null;
+        broadcastSalonState();
+    }, 400);
+}
 
 // ============================================================
 // FONCTIONS UTILITAIRES (hors connexion — accèdent à io/tables/db)
@@ -190,7 +204,7 @@ function startTurnTimer(tableId) {
 
         const active = t.players.filter(p => p.isInHand);
         if (active.length === 1) {
-            handleGameOver(tableId, active[0], t.pot, 'TOUS BANQUÉ (timeout)', t.clubId, 'tous_banque');
+            routeGameOver(tableId, active[0], t.pot, 'TOUS BANQUÉ (timeout)', t.clubId, 'tous_banque');
         } else if (active.length > 1) {
             passTurn(tableId);
         }
@@ -297,7 +311,7 @@ function checkFinalReveal(tableId, lastWinnerObj, lastCard, isFinalKoratte = fal
     const winType    = isFinalKoratte ? 'koratte' : 'normal';
 
     setTimeout(() => {
-        handleGameOver(tableId, finalWinner, currentPot, reason, club_id, winType);
+        routeGameOver(tableId, finalWinner, currentPot, reason, club_id, winType);
     }, 2500);
 }
 
@@ -411,6 +425,114 @@ async function handleGameOver(tableId, winner, pot, reason, club_id, winType = '
     io.to(tableId).emit('update-dealer', { dealerId: winner.id });
 }
 
+// Académie — JETONS : crédite le gagnant, met à jour les stats, aucune commission
+async function handleAcademyGameOver(tableId, winner, pot, reason, winType = 'normal') {
+    const table = tables[tableId];
+    if (!table || !winner) return;
+    clearTurnTimer(tableId);
+
+    const winnerGain = parseFloat(pot);
+
+    try {
+        const client = await db.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Créditer le gagnant + stats victoire
+            const { rows: wb } = await client.query(
+                'SELECT balance FROM academy_wallets WHERE user_id=$1 FOR UPDATE',
+                [winner.dbId]
+            );
+            const winBalBefore = parseFloat(wb[0]?.balance || 0);
+            const winBalAfter  = winBalBefore + winnerGain;
+
+            await client.query(
+                `UPDATE academy_wallets
+                 SET balance        = $1,
+                     games_played   = games_played + 1,
+                     games_won      = games_won    + 1,
+                     total_won      = total_won    + $2,
+                     current_streak = current_streak + 1,
+                     best_streak    = GREATEST(best_streak, current_streak + 1)
+                 WHERE user_id = $3`,
+                [winBalAfter, winnerGain, winner.dbId]
+            );
+            await client.query(
+                `INSERT INTO academy_transactions
+                 (user_id, transaction_type, amount, balance_before, balance_after, reference, game_session_id)
+                 VALUES ($1, 'VICTORY', $2, $3, $4, $5, $6)`,
+                [winner.dbId, winnerGain, winBalBefore, winBalAfter,
+                 `Victoire — ${reason}`, table.gameSessionId]
+            );
+
+            // 2. Stats défaite pour chaque perdant
+            for (const p of table.players) {
+                if (!p.dbId || p.dbId === winner.dbId) continue;
+                const { rows: lb } = await client.query(
+                    'SELECT balance FROM academy_wallets WHERE user_id=$1 FOR UPDATE', [p.dbId]
+                );
+                const lBal = parseFloat(lb[0]?.balance || 0);
+
+                await client.query(
+                    `UPDATE academy_wallets
+                     SET games_played   = games_played + 1,
+                         games_lost     = games_lost   + 1,
+                         current_streak = 0
+                     WHERE user_id = $1`,
+                    [p.dbId]
+                );
+                await client.query(
+                    `INSERT INTO academy_transactions
+                     (user_id, transaction_type, amount, balance_before, balance_after, reference, game_session_id)
+                     VALUES ($1, 'DEFEAT', $2, $3, $4, $5, $6)`,
+                    [p.dbId, -table.stake, lBal + table.stake, lBal,
+                     `Défaite — ${reason}`, table.gameSessionId]
+                );
+            }
+
+            await client.query('COMMIT');
+
+            winner.wallet = winBalAfter;
+            io.to(winner.id).emit('wallet-update', { balance: winBalAfter });
+            io.to(tableId).emit('player-list-update', table.players);
+
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        console.error('[handleAcademyGameOver]', err.message);
+    }
+
+    table.status        = 'WAITING';
+    table.gameSessionId = null;
+    table.dealerIndex   = table.players.findIndex(p => p.id === winner.id);
+
+    logAction(tableId, `VICTOIRE de ${winner.username} — gain: ${winnerGain} JETONS.`, 'victory');
+
+    io.to(tableId).emit('game-over', {
+        winnerId:       winner.id,
+        winnerUsername: winner.username,
+        winnerAvatar:   winner.avatar,
+        potAmount:      winnerGain,
+        commission:     0,
+        reason,
+        newDealerId:    winner.id
+    });
+    io.to(tableId).emit('update-dealer', { dealerId: winner.id });
+}
+
+// Routeur unique — délègue vers academy ou real selon le type de table
+function routeGameOver(tableId, winner, pot, reason, clubId, winType = 'normal') {
+    if (tables[tableId]?.tableType === 'academy') {
+        handleAcademyGameOver(tableId, winner, pot, reason, winType);
+    } else {
+        handleGameOver(tableId, winner, pot, reason, clubId, winType);
+    }
+}
+
 // Sprint 5 — Gestion des déconnexions en cours de partie
 function handleDeparture(socket, tableId) {
     const table = tables[tableId];
@@ -443,7 +565,7 @@ function handleDeparture(socket, tableId) {
     if (table.players.length === 0) {
         clearTurnTimer(tableId);
         delete tables[tableId];
-        if (tableId.startsWith('salon_')) broadcastSalonState();
+        if (tableId.startsWith('salon_')) scheduleBroadcastSalonState();
         return;
     }
 
@@ -462,7 +584,7 @@ function handleDeparture(socket, tableId) {
     if (table.status === 'PLAYING') {
         const active = table.players.filter(p => p.isInHand);
         if (active.length === 1) {
-            handleGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ (déconnexion)', table.clubId, 'tous_banque');
+            routeGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ (déconnexion)', table.clubId, 'tous_banque');
         } else if (active.length > 1 && wasInTurn) {
             passTurn(tableId);
         }
@@ -485,7 +607,7 @@ async function broadcastSalonState() {
                 game_status:  ram ? ram.status : 'WAITING'
             };
         });
-        io.emit('salon-state', state);
+        io.to('salon_room').emit('salon-state', state);
     } catch (err) {
         console.error('[broadcastSalonState]', err.message);
     }
@@ -520,6 +642,10 @@ io.on('connection', (socket) => {
                 socket.join(`club_room_${decoded.club_id}`);
             }
             socket.emit('authenticated', { role: decoded.role, id: decoded.id });
+            // Envoyer les stats en temps réel immédiatement à l'admin qui s'authentifie
+            if (['superadmin', 'katika'].includes(decoded.role)) {
+                socket.emit('visitor:stats', computeOnlineStats());
+            }
         } catch {
             socket.emit('auth-error', { reason: 'Token invalide.' });
         }
@@ -648,19 +774,33 @@ io.on('connection', (socket) => {
         if (socket.id !== dealer.id) return;
 
         // Phase 1 : Vérifier les fonds
-        const playerBalances = {};
+        const isAcademy      = table.tableType === 'academy';
+        const playerBalances = {}; // username (real) ou dbId (academy)
         try {
             for (const p of table.players) {
-                const { rows: uRows } = await db.query(
-                    'SELECT wallet FROM users WHERE username=$1', [p.username]
-                );
-                const walletVal = uRows[0] ? parseFloat(uRows[0].wallet) : 0;
-                if (!uRows[0] || walletVal < table.stake) {
-                    logAction(tableId, `Fonds insuffisants pour ${p.username}`, 'warning');
-                    socket.emit('game-start-failed', { message: `Fonds insuffisants pour ${p.username}` });
-                    return;
+                if (isAcademy) {
+                    const { rows: awRows } = await db.query(
+                        'SELECT balance FROM academy_wallets WHERE user_id=$1', [p.dbId]
+                    );
+                    const bal = awRows[0] ? parseFloat(awRows[0].balance) : 0;
+                    if (!awRows[0] || bal < table.stake) {
+                        logAction(tableId, `Jetons insuffisants pour ${p.username}`, 'warning');
+                        socket.emit('game-start-failed', { message: `Jetons insuffisants pour ${p.username}` });
+                        return;
+                    }
+                    playerBalances[p.dbId] = bal;
+                } else {
+                    const { rows: uRows } = await db.query(
+                        'SELECT wallet FROM users WHERE username=$1', [p.username]
+                    );
+                    const walletVal = uRows[0] ? parseFloat(uRows[0].wallet) : 0;
+                    if (!uRows[0] || walletVal < table.stake) {
+                        logAction(tableId, `Fonds insuffisants pour ${p.username}`, 'warning');
+                        socket.emit('game-start-failed', { message: `Fonds insuffisants pour ${p.username}` });
+                        return;
+                    }
+                    playerBalances[p.username] = walletVal;
                 }
-                playerBalances[p.username] = walletVal;
             }
         } catch (err) {
             console.error('[start-game] Vérification fonds:', err);
@@ -671,16 +811,27 @@ io.on('connection', (socket) => {
         // Phase 2 : Débiter les mises
         try {
             for (const p of table.players) {
-                const balanceBefore = playerBalances[p.username];
-                const balanceAfter  = balanceBefore - table.stake;
-                await db.query('UPDATE users SET wallet=wallet-$1 WHERE username=$2', [table.stake, p.username]);
-                await db.query(
-                    `INSERT INTO transactions (user_id, club_id, amount, balance_before, balance_after, type)
-                     VALUES ((SELECT id FROM users WHERE username=$1), $2, $3, $4, $5, 'mise')`,
-                    [p.username, data.club_id, -table.stake, balanceBefore, balanceAfter]
-                );
-                p.wallet = balanceAfter;
-                io.to(p.id).emit('wallet-update', { balance: p.wallet });
+                if (isAcademy) {
+                    const balanceBefore = playerBalances[p.dbId];
+                    const balanceAfter  = balanceBefore - table.stake;
+                    await db.query(
+                        'UPDATE academy_wallets SET balance=balance-$1 WHERE user_id=$2',
+                        [table.stake, p.dbId]
+                    );
+                    p.wallet = balanceAfter;
+                    io.to(p.id).emit('wallet-update', { balance: p.wallet });
+                } else {
+                    const balanceBefore = playerBalances[p.username];
+                    const balanceAfter  = balanceBefore - table.stake;
+                    await db.query('UPDATE users SET wallet=wallet-$1 WHERE username=$2', [table.stake, p.username]);
+                    await db.query(
+                        `INSERT INTO transactions (user_id, club_id, amount, balance_before, balance_after, type)
+                         VALUES ((SELECT id FROM users WHERE username=$1), $2, $3, $4, $5, 'mise')`,
+                        [p.username, data.club_id, -table.stake, balanceBefore, balanceAfter]
+                    );
+                    p.wallet = balanceAfter;
+                    io.to(p.id).emit('wallet-update', { balance: p.wallet });
+                }
             }
             io.to(tableId).emit('player-list-update', table.players);
         } catch (err) {
@@ -689,8 +840,8 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Phase 3 : Créer la session de jeu (non-bloquant)
-        if (dealer.dbId) {
+        // Phase 3 : Créer la session de jeu (tables réelles uniquement — non-bloquant)
+        if (!isAcademy && dealer.dbId) {
             try {
                 const { rows: gsRows } = await db.query(
                     `INSERT INTO game_sessions (club_id, dealer_id, stake, nb_players, status, started_at)
@@ -734,7 +885,7 @@ io.on('connection', (socket) => {
         });
 
         table.pot = table.players.length * table.stake;
-        logAction(tableId, `Mises collectées. Pot: ${table.pot} FCFA.`, 'system');
+        logAction(tableId, `Mises collectées. Pot: ${table.pot} ${table.currency || 'FCFA'}.`, 'system');
 
         io.to(tableId).emit('game-started', {
             pot:            table.pot,
@@ -763,7 +914,7 @@ io.on('connection', (socket) => {
 
             const active = table.players.filter(p => p.isInHand);
             if (active.length === 1) {
-                handleGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ', table.clubId, 'tous_banque');
+                routeGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ', table.clubId, 'tous_banque');
             } else if (table.players[table.turnIndex].id === socket.id) {
                 passTurn(tableId); // passTurn relance le timer
             } else {
@@ -927,7 +1078,7 @@ io.on('connection', (socket) => {
             'KORATTE': 'koratte', 'CARRE':  'carre',
             'TCHIA':   'tchia',   '3 SEPT': 'trois_sept', 'COULEUR': 'couleur'
         };
-        handleGameOver(tableId, winner, finalPot, data.reason, table.clubId,
+        routeGameOver(tableId, winner, finalPot, data.reason, table.clubId,
             winTypeMap[data.type] || 'normal');
     });
 
@@ -939,6 +1090,7 @@ io.on('connection', (socket) => {
 
     // Joueur entre dans le lobby salon — reçoit l'état complet
     socket.on('join-salon', async () => {
+        socket.join('salon_room');
         try {
             const { rows } = await db.query('SELECT * FROM v_salon_state');
             const state = rows.map(row => {
@@ -1007,7 +1159,19 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            const userBalance = parseFloat(u.wallet);
+            const tableType = salonTable.table_type || 'real';
+            const currency  = salonTable.currency  || (tableType === 'academy' ? 'JETONS' : 'FCFA');
+
+            let userBalance;
+            if (tableType === 'academy') {
+                const { rows: awRows } = await db.query(
+                    'SELECT balance FROM academy_wallets WHERE user_id=$1', [u.id]
+                );
+                userBalance = awRows[0] ? parseFloat(awRows[0].balance) : 0;
+            } else {
+                userBalance = parseFloat(u.wallet);
+            }
+
             socket.userId   = u.id;
             socket.userRole = u.role;
             connectedSockets.set(u.id, socket.id);
@@ -1015,7 +1179,7 @@ io.on('connection', (socket) => {
             // Vérifier solde minimum
             if (userBalance < parseFloat(salonTable.min_bet)) {
                 socket.emit('join-refused', {
-                    reason: `Solde insuffisant. Minimum requis : ${salonTable.min_bet} FCFA.`
+                    reason: `Solde insuffisant. Minimum requis : ${salonTable.min_bet} ${currency}.`
                 });
                 return;
             }
@@ -1058,6 +1222,7 @@ io.on('connection', (socket) => {
                     status: 'WAITING', turnIndex: 0, dealerIndex: 0,
                     cardsOnTable: [], cardsPlayedInRound: 0,
                     clubId: salonTable.club_id, salonTableId: salonId,
+                    tableType: tableType, currency: currency,
                     gameSessionId: null, turnTimer: null, turnTickInterval: null
                 };
             }
@@ -1079,13 +1244,14 @@ io.on('connection', (socket) => {
             }
 
             socket.join(tableId);
+            socket.leave('salon_room');
             socket.salonTableId = salonId;
             socket.emit('wallet-update', { balance: userBalance });
             io.to(tableId).emit('player-list-update', table.players);
             const dealer = table.players[table.dealerIndex];
             if (dealer) io.to(tableId).emit('update-dealer', { dealerId: dealer.id });
             logAction(tableId, `${data.username} s'est assis à la table.`);
-            broadcastSalonState();
+            scheduleBroadcastSalonState();
 
         } catch (err) {
             console.error('[sit-at-table]', err.message);
@@ -1128,6 +1294,7 @@ io.on('connection', (socket) => {
 
         // Visiteurs anonymes et joueurs identifiés rejoignent la salle
         socket.join(tableId);
+        socket.leave('salon_room');
         socket.salonObserving = salonId;
 
         // Envoyer l'état actuel de la table — sans les mains privées
@@ -1148,7 +1315,7 @@ io.on('connection', (socket) => {
                 if (dealer) socket.emit('update-dealer', { dealerId: dealer.id });
             }
         }
-        if (socket.userId) broadcastSalonState();
+        if (socket.userId) scheduleBroadcastSalonState();
     });
 
     // Joueur quitte sa table (se lève ou arrête d'observer)
@@ -1180,9 +1347,10 @@ io.on('connection', (socket) => {
         }
 
         socket.leave(tableId);
+        socket.join('salon_room');
         socket.salonTableId  = null;
         socket.salonObserving = null;
-        broadcastSalonState();
+        scheduleBroadcastSalonState();
     });
 
     // Joueur change de table (atomique : leave + sit)
@@ -1261,7 +1429,7 @@ io.on('connection', (socket) => {
                 [data.name || 'Nouvelle Table', data.min_bet || 100, data.max_players || 4, socket.userId]
             );
             socket.emit('table-created', rows[0]);
-            broadcastSalonState();
+            scheduleBroadcastSalonState();
         } catch (err) {
             console.error('[create-table]', err.message);
         }
@@ -1279,6 +1447,42 @@ io.on('connection', (socket) => {
         for (const tId in tables) handleDeparture(socket, tId);
     });
 });
+
+// ============================================================
+// Stats visiteurs en mémoire — aucune écriture SQL
+// Diffusé toutes les 60s vers admin_room uniquement
+// ============================================================
+function computeOnlineStats() {
+    let visitors = 0, authenticated = 0, inTable = 0;
+
+    for (const [, sock] of io.sockets.sockets) {
+        if (sock.userId) {
+            authenticated++;
+            if (sock.salonTableId || sock.salonObserving) inTable++;
+        } else {
+            visitors++;
+        }
+    }
+
+    const tablesArr    = Object.values(tables);
+    const activeTables = tablesArr.length;
+    const playingTables = tablesArr.filter(t => t.status === 'PLAYING').length;
+
+    return {
+        visitors_online:     visitors,
+        players_online:      authenticated,
+        in_salon:            authenticated - inTable,
+        in_game:             inTable,
+        active_tables:       activeTables,
+        playing_tables:      playingTables,
+        total_connected:     visitors + authenticated
+    };
+}
+
+setInterval(() => {
+    if (io.sockets.sockets.size === 0) return;
+    io.to('admin_room').emit('visitor:stats', computeOnlineStats());
+}, 60_000);
 
 // ============================================================
 // Sprint 5 — Vérification périodique des statuts (toutes les 60s)
