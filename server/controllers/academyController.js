@@ -15,11 +15,27 @@ exports.getWallet = async (req, res) => {
             [req.user.id]
         );
 
-        if (!rows.length) {
-            return res.status(404).json({ msg: 'Wallet académie introuvable.' });
+        let walletRow = rows[0];
+        if (!walletRow) {
+            // Auto-créer le wallet si absent (utilisateurs antérieurs à migration 005)
+            await db.query(
+                `INSERT INTO academy_wallets (user_id, balance, total_granted, last_daily_grant)
+                 VALUES ($1, 10000, 10000, NOW())
+                 ON CONFLICT (user_id) DO NOTHING`,
+                [req.user.id]
+            );
+            const retry = await db.query(
+                `SELECT balance, last_daily_grant, total_granted,
+                        games_played, games_won, games_lost,
+                        total_won, total_lost, current_streak, best_streak
+                 FROM academy_wallets WHERE user_id = $1`,
+                [req.user.id]
+            );
+            if (!retry.rows.length) return res.status(500).json({ msg: 'Erreur serveur.' });
+            walletRow = retry.rows[0];
         }
 
-        const w          = rows[0];
+        const w          = walletRow;
         const now        = Date.now();
         const lastGrant  = w.last_daily_grant ? new Date(w.last_daily_grant).getTime() : 0;
         const canClaim   = (now - lastGrant) >= DAILY_GRANT_MS;

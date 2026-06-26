@@ -21,6 +21,7 @@ const salonRoutes         = require('./routes/salonRoutes');
 const notificationRoutes    = require('./routes/notificationRoutes');
 const academyRoutes         = require('./routes/academyRoutes');
 const announcementRoutes    = require('./routes/announcementRoutes');
+const termsRoutes           = require('./routes/termsRoutes');
 
 // Sprint 5 — CORS whitelist (remplace origin: "*")
 // Render injecte RENDER_EXTERNAL_URL automatiquement → auto-ajouté à la whitelist
@@ -52,6 +53,7 @@ app.use('/api/salon',         salonRoutes);
 app.use('/api/notifications',  notificationRoutes);
 app.use('/api/academy',        academyRoutes);
 app.use('/api/announcements',  announcementRoutes);
+app.use('/api/terms',          termsRoutes);
 
 // Empêche la mise en cache des pages HTML protégées (fix retour arrière après logout)
 app.use((req, res, next) => {
@@ -315,6 +317,13 @@ function checkFinalReveal(tableId, lastWinnerObj, lastCard, isFinalKoratte = fal
     }, 2500);
 }
 
+// Barème FAP FAP 2.2 : commission variable selon le nombre de joueurs
+function commissionRateByPlayerCount(nbPlayers) {
+    if (nbPlayers <= 2) return 0.03; // 3 %
+    if (nbPlayers === 3) return 0.05; // 5 %
+    return 0.07; // 7 % pour 4+ joueurs
+}
+
 // Sprint 2 : commission + audit_logs + game_sessions
 async function handleGameOver(tableId, winner, pot, reason, club_id, winType = 'normal') {
     const table = tables[tableId];
@@ -323,17 +332,19 @@ async function handleGameOver(tableId, winner, pot, reason, club_id, winType = '
 
     let winnerGain     = parseFloat(pot);
     let commission     = 0;
-    let commissionRate = 0.05;
-    let waliId         = null;
     let katikaId       = null;
+    let waliId         = null;
+
+    // Commission dynamique selon le nombre de joueurs à la table
+    const nbPlayers    = table.players.length || 2;
+    const commissionRate = commissionRateByPlayerCount(nbPlayers);
 
     try {
         const { rows: clubRows } = await db.query(
-            'SELECT commission_rate, katika_id FROM clubs WHERE id=$1', [club_id]
+            'SELECT katika_id FROM clubs WHERE id=$1', [club_id]
         );
         if (clubRows[0]) {
-            commissionRate = parseFloat(clubRows[0].commission_rate);
-            katikaId       = clubRows[0].katika_id;
+            katikaId = clubRows[0].katika_id;
         }
         commission = Math.round(parseFloat(pot) * commissionRate * 100) / 100;
         winnerGain = parseFloat(pot) - commission;
@@ -365,7 +376,7 @@ async function handleGameOver(tableId, winner, pot, reason, club_id, winType = '
                     `INSERT INTO transactions (user_id, club_id, amount, balance_before, balance_after, type, note)
                      VALUES ($1, $2, $3, $4, $5, 'commission', $6)`,
                     [waliId, club_id, commission, waliBefore, waliBefore + commission,
-                     `Commission ${(commissionRate * 100).toFixed(1)}% — club ${club_id}`]
+                     `Commission ${(commissionRate * 100).toFixed(0)}% (${nbPlayers}j) — club ${club_id}`]
                 );
             }
         }

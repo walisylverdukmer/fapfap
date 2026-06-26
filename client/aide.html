@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centre d'aide — FAP FAP</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a5c2f">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { background: #0a0a0a; color: #ddd; font-family: 'Segoe UI', sans-serif; margin: 0; }
+
+        .aide-header {
+            background: #000; padding: 0 20px; height: 58px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 2px solid var(--gold);
+        }
+        .aide-header h1 { color: var(--gold); font-size: 1.2rem; margin: 0; letter-spacing: 2px; }
+        .btn-back {
+            background: transparent; border: 1px solid #555; color: #aaa;
+            border-radius: 6px; padding: 7px 16px; font-size: 0.82rem;
+            cursor: pointer; text-decoration: none; display: inline-block;
+        }
+        .btn-back:hover { border-color: var(--gold); color: var(--gold); }
+
+        .aide-content { max-width: 820px; margin: 0 auto; padding: 30px 20px 60px; }
+
+        .aide-hero {
+            text-align: center; margin-bottom: 36px;
+        }
+        .aide-hero h2 { color: var(--gold); font-size: 1.5rem; margin: 0 0 8px; }
+        .aide-hero p { color: #888; font-size: 0.88rem; }
+
+        /* Cartes liens rapides */
+        .quick-links {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px; margin-bottom: 32px;
+        }
+        .quick-card {
+            background: #141414; border: 1px solid #2a2a2a; border-radius: 12px;
+            padding: 20px 18px; text-align: center; text-decoration: none;
+            transition: border-color 0.2s, transform 0.15s;
+        }
+        .quick-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+        .quick-card .qc-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+        .quick-card .qc-title { font-size: 0.88rem; font-weight: bold; color: var(--gold); margin-bottom: 4px; }
+        .quick-card .qc-desc { font-size: 0.75rem; color: #666; }
+
+        /* Sections FAQ */
+        .aide-section {
+            background: #141414; border: 1px solid #2a2a2a;
+            border-radius: 12px; padding: 22px 26px; margin-bottom: 18px;
+        }
+        .aide-section h3 {
+            color: var(--gold); font-size: 1rem; margin: 0 0 16px;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        /* FAQ accordéon */
+        .faq-item { border-bottom: 1px solid #1e1e1e; }
+        .faq-item:last-child { border-bottom: none; }
+        .faq-q {
+            padding: 13px 0; cursor: pointer;
+            font-size: 0.88rem; font-weight: 600; color: #ddd;
+            display: flex; justify-content: space-between; align-items: center;
+            user-select: none;
+        }
+        .faq-q:hover { color: var(--gold); }
+        .faq-q .arrow { color: #555; font-size: 0.8rem; transition: transform 0.2s; }
+        .faq-q.open .arrow { transform: rotate(90deg); color: var(--gold); }
+        .faq-a {
+            display: none; font-size: 0.82rem; color: #aaa;
+            line-height: 1.7; padding-bottom: 13px;
+        }
+        .faq-a.open { display: block; }
+
+        /* Bloc contact */
+        .contact-block {
+            background: linear-gradient(135deg, #1a2200, #0a1a00);
+            border: 1px solid rgba(212,175,55,0.3); border-radius: 12px;
+            padding: 24px; text-align: center; margin-bottom: 18px;
+        }
+        .contact-block h3 { color: var(--gold); margin: 0 0 8px; font-size: 1rem; }
+        .contact-block p { color: #aaa; font-size: 0.85rem; margin-bottom: 16px; }
+        .btn-whatsapp {
+            background: #25d366; color: #fff; border: none; border-radius: 10px;
+            padding: 13px 28px; font-size: 0.9rem; font-weight: bold;
+            cursor: pointer; text-decoration: none; display: inline-block;
+        }
+        .btn-whatsapp:hover { filter: brightness(1.1); }
+
+        /* CGU link */
+        .cgu-block {
+            background: #141414; border: 1px solid #2a2a2a; border-radius: 12px;
+            padding: 18px 24px; display: flex; align-items: center;
+            justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;
+        }
+        .cgu-block .cgu-text { font-size: 0.85rem; color: #aaa; }
+        .cgu-block .cgu-text strong { color: #ddd; }
+        .btn-cgu {
+            background: transparent; border: 1px solid var(--gold); color: var(--gold);
+            border-radius: 8px; padding: 9px 20px; font-size: 0.82rem;
+            cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap;
+        }
+        .btn-cgu:hover { background: rgba(212,175,55,0.1); }
+
+        @media (max-width: 600px) {
+            .aide-content { padding: 16px 14px 50px; }
+            .quick-links  { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="aide-header">
+    <h1>♠ CENTRE D'AIDE</h1>
+    <a href="salon.html" class="btn-back">← Retour au salon</a>
+</header>
+
+<div class="aide-content">
+
+    <div class="aide-hero">
+        <h2>Comment pouvons-nous vous aider ?</h2>
+        <p>Trouvez rapidement une réponse ou contactez notre équipe.</p>
+    </div>
+
+    <!-- Liens rapides -->
+    <div class="quick-links">
+        <a href="regles.html" class="quick-card">
+            <span class="qc-icon">📖</span>
+            <div class="qc-title">Règles du jeu</div>
+            <div class="qc-desc">Apprenez les règles complètes du FAP FAP</div>
+        </a>
+        <a href="salon.html#retrait" class="quick-card" onclick="openWithdrawal(); return false;">
+            <span class="qc-icon">💸</span>
+            <div class="qc-title">Demande de retrait</div>
+            <div class="qc-desc">Retirez vos gains via Wave</div>
+        </a>
+        <a href="salon.html" class="quick-card">
+            <span class="qc-icon">🎰</span>
+            <div class="qc-title">Jouer maintenant</div>
+            <div class="qc-desc">Rejoindre une table du salon</div>
+        </a>
+        <a href="#faq" class="quick-card" onclick="document.getElementById('faq').scrollIntoView({behavior:'smooth'}); return false;">
+            <span class="qc-icon">❓</span>
+            <div class="qc-title">FAQ</div>
+            <div class="qc-desc">Questions fréquemment posées</div>
+        </a>
+    </div>
+
+    <!-- Bloc WhatsApp (lien administrable) -->
+    <div class="contact-block" id="contact-block">
+        <h3>📱 Groupe officiel de la communauté</h3>
+        <p>Rejoignez notre groupe WhatsApp pour les annonces, tournois et l'entraide entre joueurs.</p>
+        <a id="btn-whatsapp-link" href="#" class="btn-whatsapp" target="_blank" rel="noopener" style="display:none">
+            📲 Rejoindre le groupe WhatsApp
+        </a>
+        <p id="wa-loading" style="color:#555;font-size:0.82rem;">Chargement du lien…</p>
+    </div>
+
+    <!-- Contacter un Katika -->
+    <div class="aide-section">
+        <h3>🎖️ Contacter un Katika</h3>
+        <p style="color:#aaa;font-size:0.85rem;margin-bottom:12px;">Votre Katika (gestionnaire de club) peut vous aider pour :</p>
+        <ul style="color:#aaa;font-size:0.85rem;line-height:1.8;padding-left:20px;">
+            <li>Recharger votre compte FCFA via Wave</li>
+            <li>Résoudre les litiges de partie</li>
+            <li>Toute question sur la gestion de votre club</li>
+        </ul>
+        <p style="color:#666;font-size:0.8rem;margin-top:10px;">Pour trouver votre Katika, consultez le groupe WhatsApp officiel ou le salon de jeu.</p>
+    </div>
+
+    <!-- CGU -->
+    <div class="cgu-block">
+        <div class="cgu-text">
+            <strong>Conditions d'utilisation</strong><br>
+            Consultez nos CGU complètes pour connaître vos droits et obligations.
+        </div>
+        <a href="#cgu" class="btn-cgu" onclick="showCguInline(); return false;">Lire les CGU</a>
+    </div>
+
+    <!-- CGU inline (cachées par défaut) -->
+    <div id="cgu-inline" style="display:none" class="aide-section">
+        <h3>📄 Conditions d'utilisation</h3>
+        <div style="color:#aaa;font-size:0.85rem;line-height:1.8;">
+            <p><strong style="color:#ddd">Bienvenue sur FAP FAP.</strong></p>
+            <p>En utilisant notre plateforme, vous acceptez les conditions suivantes :</p>
+            <ol style="padding-left:20px;color:#aaa;">
+                <li>Vous jouez sous votre entière responsabilité.</li>
+                <li>Chaque joueur est responsable des décisions qu'il prend et des mises qu'il engage.</li>
+                <li>Jouez avec modération. La plateforme FAP FAP n'est pas responsable des pertes financières.</li>
+                <li>Les parties démarrent à partir de deux joueurs.</li>
+                <li>Les retraits peuvent être demandés à tout moment via le menu.</li>
+                <li>Les paiements et retraits sont effectués exclusivement via <strong style="color:#ddd">Wave</strong>.</li>
+                <li>Les demandes de retrait sont traitées par les administrateurs et Katika dans les meilleurs délais.</li>
+                <li>Toute tentative de triche ou de fraude entraîne la suspension immédiate du compte.</li>
+                <li>FAP FAP se réserve le droit de modifier ces conditions à tout moment. Une nouvelle acceptation sera demandée en cas de mise à jour.</li>
+                <li>Vous pouvez contacter l'administration via le groupe officiel de la communauté.</li>
+            </ol>
+            <p style="margin-top:14px;color:#666;font-size:0.8rem;">Version en vigueur : 1.0 · FAP FAP 2026</p>
+        </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="aide-section" id="faq">
+        <h3>❓ Questions fréquentes</h3>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                Comment recharger mon compte ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                Contactez votre Katika ou utilisez le bouton <strong>Demander des jetons</strong> dans le salon. Toutes les recharges se font exclusivement via Wave. Votre Katika validera votre demande sous peu.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                Comment demander un retrait ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                Dans le salon de jeu, cliquez sur le bouton <strong>Demande de retrait</strong> (menu en haut). Saisissez le montant souhaité, votre numéro Wave et le nom du titulaire du compte. L'administration traite votre demande et vous paie via Wave.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                Combien de temps pour recevoir un paiement ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                Les demandes de retrait sont traitées par l'équipe administrative. Les délais varient selon l'activité, mais l'objectif est de traiter chaque demande dans les 24 heures suivant la validation.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                Qu'est-ce que l'Académie FAP FAP ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                L'Académie est un espace d'entraînement gratuit. Vous recevez 10 000 JETONS à l'inscription (plus 10 000 par jour), et vous jouez sur des tables spéciales sans argent réel. Les JETONS ne sont pas convertibles en FCFA.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                Mon compte a été suspendu, que faire ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                Les suspensions sont appliquées en cas de fraude répétée ou de non-respect des conditions. Contactez l'administration via le groupe WhatsApp officiel pour expliquer votre situation.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                J'ai perdu ma connexion pendant une partie, ma mise est-elle perdue ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                En cas de déconnexion, vous avez quelques secondes pour vous reconnecter. Passé ce délai, le système vous banque automatiquement et votre mise reste dans le pot. Pour les incidents techniques, contactez l'administration avec les détails de la partie.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+                Comment devenir Katika (gestionnaire) ?
+                <span class="arrow">▶</span>
+            </div>
+            <div class="faq-a">
+                Le statut de Katika est attribué par le Wali (administrateur principal). Rejoignez le groupe WhatsApp officiel et présentez votre candidature.
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align:center;margin-top:30px;">
+        <a href="salon.html" style="color:var(--gold);text-decoration:none;font-size:0.88rem;">← Retour au salon de jeu</a>
+        &nbsp;·&nbsp;
+        <a href="regles.html" style="color:var(--gold);text-decoration:none;font-size:0.88rem;">📖 Règles du jeu</a>
+    </div>
+
+</div>
+
+<script src="config.js"></script>
+<script>
+function toggleFaq(el) {
+    const ans = el.nextElementSibling;
+    const isOpen = el.classList.contains('open');
+    document.querySelectorAll('.faq-q.open').forEach(q => {
+        q.classList.remove('open');
+        q.nextElementSibling.classList.remove('open');
+    });
+    if (!isOpen) {
+        el.classList.add('open');
+        ans.classList.add('open');
+    }
+}
+
+function showCguInline() {
+    const el = document.getElementById('cgu-inline');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'block') el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function openWithdrawal() {
+    window.location.href = 'salon.html#retrait';
+}
+
+// Charger le lien WhatsApp depuis platform_settings
+async function loadWhatsAppLink() {
+    try {
+        const r = await fetch(BACKEND_URL + '/api/announcements');
+        if (!r.ok) return;
+        // Chercher dans les annonces un lien WhatsApp
+        const { announcements } = await r.json();
+        const waAnn = announcements?.find(a => a.channel_whatsapp);
+        if (waAnn?.channel_whatsapp) {
+            const btn = document.getElementById('btn-whatsapp-link');
+            btn.href = waAnn.channel_whatsapp;
+            btn.style.display = 'inline-block';
+            document.getElementById('wa-loading').style.display = 'none';
+        } else {
+            document.getElementById('wa-loading').textContent = 'Lien communautaire bientôt disponible.';
+        }
+    } catch {
+        document.getElementById('wa-loading').textContent = 'Lien communautaire bientôt disponible.';
+    }
+}
+
+loadWhatsAppLink();
+</script>
+
+</body>
+</html>

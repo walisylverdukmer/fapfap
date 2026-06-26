@@ -17,9 +17,12 @@ let myAcademyBalance = 0;
 const headerArea = document.getElementById('header-user-area');
 if (isAuth) {
     headerArea.innerHTML = `
-        <span>Connecté : <strong>${user.username}</strong></span>
+        <span style="color:#888;font-size:0.82rem">Connecté : <strong style="color:#ddd">${user.username}</strong></span>
         <span id="wallet-display">${myWallet.toLocaleString()} FCFA</span>
-        <span id="jetons-display" title="Solde Académie — cliquer pour voir l'historique" style="display:none">0 🎫</span>
+        <span id="jetons-display" title="Solde Académie" style="display:none">0 🎫</span>
+        <button class="user-menu-btn wave" onclick="openModalWithdrawal()" title="Demande de retrait Wave">💸 Retrait</button>
+        <a href="aide.html"   class="user-menu-btn" style="text-decoration:none">❓ Aide</a>
+        <a href="regles.html" class="user-menu-btn" style="text-decoration:none">📖 Règles</a>
         <span id="rs-badge-slot"></span>
         <button class="btn-logout" onclick="logout()">Déconnexion</button>`;
     document.getElementById('visitor-banner').style.display = 'none';
@@ -96,6 +99,22 @@ socket.on('academy:daily-claimed', ({ granted, new_balance }) => {
     myAcademyBalance = new_balance;
     updateAcademyWidget(false);
     showToast(`+${granted.toLocaleString()} JETONS ajoutés ! Bonne chance à l'Académie.`);
+});
+
+socket.on('withdrawal:validated', ({ amount }) => {
+    showToast(`Retrait de ${amount.toLocaleString()} FCFA validé — paiement en cours.`);
+});
+socket.on('withdrawal:rejected', ({ reason }) => {
+    showToast(`Retrait refusé : ${reason}`, true);
+});
+socket.on('withdrawal:paid', ({ amount, new_balance }) => {
+    myWallet = new_balance;
+    const disp = document.getElementById('wallet-display');
+    if (disp) disp.textContent = myWallet.toLocaleString() + ' FCFA';
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    u.wallet = new_balance;
+    localStorage.setItem('user', JSON.stringify(u));
+    showToast(`Retrait de ${amount.toLocaleString()} FCFA payé via Wave !`);
 });
 
 // =====================================================
@@ -550,6 +569,117 @@ async function submitTokenRequest() {
 }
 
 // =====================================================
+// CONDITIONS D'UTILISATION (CGU)
+// =====================================================
+
+async function checkTerms() {
+    if (!token) return; // visiteurs anonymes exemptés
+    try {
+        const r = await fetch(BACKEND_URL + '/api/terms/status', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!data.accepted) {
+            document.getElementById('modal-cgu').classList.add('open');
+        }
+    } catch { /* silencieux — ne pas bloquer si l'API est inaccessible */ }
+}
+
+function toggleCguAccept() {
+    const cb  = document.getElementById('cgu-checkbox');
+    const btn = document.getElementById('btn-cgu-accept');
+    if (cb.checked) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor  = 'pointer';
+    } else {
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.style.cursor  = 'not-allowed';
+    }
+}
+
+async function acceptTerms() {
+    const btn = document.getElementById('btn-cgu-accept');
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        const r = await fetch(BACKEND_URL + '/api/terms/accept', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+        });
+        if (!r.ok) {
+            btn.disabled = false;
+            btn.textContent = 'Accepter et continuer';
+            showToast('Erreur lors de l\'enregistrement. Réessayez.', true);
+            return;
+        }
+        document.getElementById('modal-cgu').classList.remove('open');
+        showToast('Conditions acceptées — Bonne partie !');
+    } catch {
+        btn.disabled = false;
+        btn.textContent = 'Accepter et continuer';
+        showToast('Erreur réseau.', true);
+    }
+}
+
+// =====================================================
+// DEMANDE DE RETRAIT WAVE
+// =====================================================
+
+function openModalWithdrawal() {
+    if (!isAuth) { openModalLogin(); return; }
+    closeModals();
+    const soldeEl = document.getElementById('wd-solde-val');
+    if (soldeEl) soldeEl.textContent = myWallet.toLocaleString('fr-FR') + ' FCFA';
+    document.getElementById('wd-amount').value      = '';
+    document.getElementById('wd-wave-number').value  = '';
+    document.getElementById('wd-wave-holder').value  = '';
+    document.getElementById('wd-observations').value = '';
+    document.getElementById('wd-error').textContent  = '';
+    document.getElementById('modal-withdrawal').classList.add('open');
+}
+
+async function submitWithdrawal() {
+    const amount      = parseFloat(document.getElementById('wd-amount').value);
+    const waveNumber  = document.getElementById('wd-wave-number').value.trim();
+    const waveHolder  = document.getElementById('wd-wave-holder').value.trim();
+    const observations = document.getElementById('wd-observations').value.trim();
+    const errEl       = document.getElementById('wd-error');
+
+    if (!amount || amount < 500) { errEl.textContent = 'Montant minimum : 500 FCFA.'; return; }
+    if (amount > myWallet)       { errEl.textContent = 'Montant supérieur à votre solde disponible.'; return; }
+    if (!waveNumber)             { errEl.textContent = 'Numéro Wave requis.'; return; }
+    if (!waveHolder)             { errEl.textContent = 'Nom du titulaire Wave requis.'; return; }
+
+    errEl.textContent = '';
+    const btn = document.querySelector('#modal-withdrawal .btn-confirm');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+    try {
+        const r = await fetch(BACKEND_URL + '/api/money/withdrawals', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ amount, wave_number: waveNumber, wave_holder: waveHolder, observations: observations || undefined })
+        });
+        const data = await r.json();
+
+        if (!r.ok) {
+            errEl.textContent = data.msg || 'Erreur lors de la demande.';
+            if (btn) { btn.disabled = false; btn.textContent = 'Envoyer la demande'; }
+            return;
+        }
+
+        closeModals();
+        showToast(`Demande de retrait de ${amount.toLocaleString('fr-FR')} FCFA envoyée. L'administration la traitera rapidement.`);
+    } catch {
+        errEl.textContent = 'Erreur réseau. Réessayez.';
+        if (btn) { btn.disabled = false; btn.textContent = 'Envoyer la demande'; }
+    }
+}
+
+// =====================================================
 // ADMIN — CRÉER UNE TABLE
 // =====================================================
 
@@ -656,8 +786,9 @@ loadAnnouncements();
 if (isAuth) {
     refreshWalletDisplay();
     loadAcademyWallet().then(() => {
-        // Afficher le widget uniquement si connecté
         const w = document.getElementById('academy-wallet-widget');
         if (w) w.style.display = 'flex';
     });
+    // Vérifier l'acceptation des CGU après un court délai (laisser le salon se charger)
+    setTimeout(checkTerms, 1200);
 }

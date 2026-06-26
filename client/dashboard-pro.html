@@ -129,6 +129,31 @@
         }
         #recharges-count.visible { display: inline-block; }
 
+        /* ── SECTION RETRAITS ──────────────────── */
+        .withdrawal-status {
+            display: inline-block; font-size: 0.7rem; font-weight: bold;
+            padding: 3px 8px; border-radius: 10px; letter-spacing: 0.5px;
+        }
+        .ws-pending   { background: #2a2200; color: #f39c12; border: 1px solid rgba(243,156,18,0.4); }
+        .ws-validated { background: #1a2a3a; color: #3498db; border: 1px solid rgba(52,152,219,0.4); }
+        .ws-paid      { background: #1a3a1a; color: #2ecc71; border: 1px solid rgba(46,204,113,0.4); }
+        .ws-rejected  { background: #3a1a1a; color: #e74c3c; border: 1px solid rgba(231,76,60,0.4); }
+
+        .btn-wd-validate { background: #1a2a3a; color: #3498db; border: 1px solid #3498db; border-radius: 5px; padding: 5px 10px; font-size: 0.73rem; cursor: pointer; }
+        .btn-wd-validate:hover { background: #3498db; color: #fff; }
+        .btn-wd-pay      { background: #1a3a1a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 5px; padding: 5px 10px; font-size: 0.73rem; cursor: pointer; }
+        .btn-wd-pay:hover { background: #2ecc71; color: #000; }
+        .btn-wd-reject   { background: #3a1a1a; color: #e74c3c; border: 1px solid #e74c3c; border-radius: 5px; padding: 5px 10px; font-size: 0.73rem; cursor: pointer; }
+        .btn-wd-reject:hover { background: #e74c3c; color: #fff; }
+
+        #withdrawals-count {
+            display: inline-block; background: #e74c3c; color: white;
+            border-radius: 50%; width: 18px; height: 18px; font-size: 0.65rem;
+            font-weight: bold; text-align: center; line-height: 18px; margin-left: 6px;
+            display: none;
+        }
+        #withdrawals-count.visible { display: inline-block; }
+
         /* ── TOAST ─────────────────────────────── */
         #toast {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -195,6 +220,8 @@
         <a href="dashboard-pro.html" class="nav-link active">📊 TABLEAU DE BORD</a>
         <a href="salon.html"         class="nav-link">🎰 SALON DE JEU</a>
         <a href="club-manage.html"   class="nav-link">📂 GESTION CLUBS</a>
+        <a href="regles.html"        class="nav-link" target="_blank">📖 RÈGLES</a>
+        <a href="aide.html"          class="nav-link" target="_blank">❓ AIDE</a>
     </nav>
 
     <!-- Overlay panneau -->
@@ -224,6 +251,29 @@
                 <div class="stat-card"><p style="margin:0;color:#888;font-size:0.8rem;">Joueurs Académie</p><div class="stat-val" id="statAcademy" style="color:#9b59b6;">—</div></div>
                 <div class="stat-card" title="Mis à jour toutes les 60s"><p style="margin:0;color:#888;font-size:0.8rem;">En Ligne ●</p><div class="stat-val" id="statOnline" style="color:#3498db;">—</div></div>
                 <div class="stat-card" title="Mis à jour toutes les 60s"><p style="margin:0;color:#888;font-size:0.8rem;">Tables Actives ●</p><div class="stat-val" id="statTablesLive" style="color:#e67e22;">—</div></div>
+            </div>
+
+            <!-- ── DEMANDES DE RETRAIT WAVE ──────────────── -->
+            <div class="card" style="margin-bottom:20px;">
+                <h3>💸 RETRAITS WAVE <span id="withdrawals-count"></span></h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Joueur</th>
+                            <th>Téléphone</th>
+                            <th>N° Wave</th>
+                            <th>Titulaire Wave</th>
+                            <th>Montant</th>
+                            <th>Date</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="withdrawalsBody">
+                        <tr><td colspan="9" style="text-align:center;color:#555;padding:20px;">Chargement…</td></tr>
+                    </tbody>
+                </table>
             </div>
 
             <!-- ── DEMANDES DE JETONS ───────────────────── -->

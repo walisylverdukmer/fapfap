@@ -30,8 +30,8 @@ socket.on('notification:new', (notif) => {
     unreadCount++;
     updateBadge(unreadCount);
     prependNotification(notif, true);
-    // Recharger les recharges pending si c'est une demande de jetons
-    if (notif.type === 'demande_jetons') loadRecharges();
+    if (notif.type === 'demande_jetons')  loadRecharges();
+    if (notif.type === 'demande_retrait') loadWithdrawals();
 });
 
 socket.on('notification:badge', ({ delta }) => {
@@ -52,6 +52,7 @@ initAdmin();
 
 async function initAdmin() {
     loadKatikaList();
+    loadWithdrawals();
     loadRecharges();
     loadNotifications();
     loadAnnouncements();
@@ -132,7 +133,11 @@ const NOTIF_ICONS = {
     recharge_rejetee:     '❌',
     suspension:           '🔴',
     creation_table:       '🎰',
-    fermeture_table:      '🚫'
+    fermeture_table:      '🚫',
+    demande_retrait:      '💸',
+    retrait_valide:       '🔵',
+    retrait_refuse:       '🚫',
+    retrait_paye:         '✅'
 };
 
 function buildNotifHTML(n) {
@@ -227,6 +232,94 @@ async function rejectRecharge(id) {
         } else {
             showToast(data.msg || 'Erreur.', true);
         }
+    } catch { showToast('Erreur réseau.', true); }
+}
+
+// =====================================================
+// RETRAITS WAVE
+// =====================================================
+
+const WD_STATUS_LABELS = {
+    pending:   '<span class="withdrawal-status ws-pending">En attente</span>',
+    validated: '<span class="withdrawal-status ws-validated">Validé</span>',
+    rejected:  '<span class="withdrawal-status ws-rejected">Refusé</span>',
+    paid:      '<span class="withdrawal-status ws-paid">Payé</span>'
+};
+
+async function loadWithdrawals() {
+    const tbody    = document.getElementById('withdrawalsBody');
+    const cntBadge = document.getElementById('withdrawals-count');
+    if (!tbody) return;
+    try {
+        const r = await apiFetch('/api/money/withdrawals');
+        if (!r.ok) return;
+        const list = await r.json();
+
+        const pendingCount = list.filter(w => w.status === 'pending').length;
+        cntBadge.textContent = pendingCount;
+        cntBadge.classList.toggle('visible', pendingCount > 0);
+
+        if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#555;padding:20px;">Aucune demande de retrait</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = list.map(w => {
+            const date = new Date(w.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            const actions = w.status === 'pending' ? `
+                <button class="btn-wd-validate" onclick="validateWithdrawal(${w.id})">✓ Valider</button>
+                <button class="btn-wd-reject"   onclick="rejectWithdrawal(${w.id})">✕ Refuser</button>
+            ` : w.status === 'validated' ? `
+                <button class="btn-wd-pay" onclick="payWithdrawal(${w.id})">💸 Payer</button>
+                <button class="btn-wd-reject" onclick="rejectWithdrawal(${w.id})" style="font-size:0.7rem">Annuler</button>
+            ` : `<span style="color:#555;font-size:0.75rem;">—</span>`;
+
+            return `
+                <tr>
+                    <td style="color:#555;font-size:0.75rem;">#${w.id}</td>
+                    <td><strong>${w.username}</strong></td>
+                    <td style="color:#888;font-size:0.78rem;">${w.phone}</td>
+                    <td style="font-family:monospace;font-size:0.82rem;">${w.wave_number}</td>
+                    <td style="font-size:0.82rem;">${w.wave_holder}</td>
+                    <td style="color:var(--pro-gold);font-weight:bold;">${parseFloat(w.amount).toLocaleString('fr-FR')} FCFA</td>
+                    <td style="color:#666;font-size:0.75rem;">${date}</td>
+                    <td>${WD_STATUS_LABELS[w.status] || w.status}</td>
+                    <td style="white-space:nowrap;">${actions}</td>
+                </tr>`;
+        }).join('');
+    } catch {
+        tbody.innerHTML = `<tr><td colspan="9" style="color:#e74c3c;text-align:center;">Erreur chargement.</td></tr>`;
+    }
+}
+
+async function validateWithdrawal(id) {
+    if (!confirm('Valider cette demande de retrait ?')) return;
+    try {
+        const r = await apiFetch(`/api/money/withdrawals/${id}/validate`, 'PUT');
+        const data = await r.json();
+        if (r.ok) { showToast('Retrait validé — en attente de paiement.'); loadWithdrawals(); }
+        else showToast(data.msg || 'Erreur.', true);
+    } catch { showToast('Erreur réseau.', true); }
+}
+
+async function rejectWithdrawal(id) {
+    const note = prompt('Motif du refus (optionnel) :') ?? '';
+    if (note === null) return; // annulé
+    try {
+        const r = await apiFetch(`/api/money/withdrawals/${id}/reject`, 'PUT', { note });
+        const data = await r.json();
+        if (r.ok) { showToast('Retrait refusé.'); loadWithdrawals(); }
+        else showToast(data.msg || 'Erreur.', true);
+    } catch { showToast('Erreur réseau.', true); }
+}
+
+async function payWithdrawal(id) {
+    if (!confirm('Confirmer le paiement via Wave ? Cette action débitera le solde du joueur.')) return;
+    try {
+        const r = await apiFetch(`/api/money/withdrawals/${id}/pay`, 'PUT');
+        const data = await r.json();
+        if (r.ok) { showToast(`✅ ${data.msg}`); loadWithdrawals(); }
+        else showToast(data.msg || 'Erreur.', true);
     } catch { showToast('Erreur réseau.', true); }
 }
 
