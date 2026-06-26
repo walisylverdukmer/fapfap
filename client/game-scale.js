@@ -13,7 +13,7 @@
     var TABLE_H         = 520;
     var SLOT_OVERHANG_V = 65 + 130; // slots haut/bas + main cartes (portion sous la table)
     var SLOT_OVERHANG_T = 65;       // slot du haut (au-dessus)
-    var MOBILE_BP       = 768;      // breakpoint mobile
+    var MOBILE_BP       = 900;      // breakpoint mobile (élargi à 900 pour tablettes)
 
     // ── Mise à l'échelle ────────────────────────────
 
@@ -28,26 +28,34 @@
         var vh    = window.innerHeight;
         var isMob = vw <= MOBILE_BP;
 
+        // Paysage mobile : header réduit + overhangs compressés
+        var isMobLandscape = isMob && (vw > vh);
+        var hdrEff = isMobLandscape ? Math.min(hdrH, 44) : hdrH;
+        var ovhT   = isMobLandscape ? 30  : SLOT_OVERHANG_T;   // slot haut presque invisible
+        var ovhB   = isMobLandscape ? 105 : SLOT_OVERHANG_V;   // main compressée en paysage
+
         // Espace disponible
-        var availW = vw;                       // sidebars sont en tiroir sur mobile
-        var availH = vh - hdrH - 20;           // 20px de marge basse
+        var availW = vw;                            // sidebars en tiroir sur mobile
+        var margin = isMobLandscape ? 8 : 20;
+        var availH = vh - hdrEff - margin;
 
         // Hauteur totale occupée par l'ensemble table+slots+cartes
-        var totalH = TABLE_H + SLOT_OVERHANG_T + SLOT_OVERHANG_V;
+        var totalH = TABLE_H + ovhT + ovhB;
 
         var scaleX = availW / TABLE_W;
         var scaleY = availH / totalH;
-        var scale  = Math.min(scaleX, scaleY, 1); // jamais agrandir au-delà de 1
+        // Sur mobile (pas de sidebars), on peut dépasser légèrement 1
+        var maxScale = isMob ? 1.2 : 1.0;
+        var scale  = Math.min(scaleX, scaleY, maxScale);
 
         // Appliquer la transformation
         table.style.transform       = 'scale(' + scale + ')';
         table.style.transformOrigin = 'top center';
 
         // Recalculer marginTop pour combler l'espace "volé" par le scale
-        // Sans ajustement, la table scalée laisse un vide en dessous
-        var naturalMarginTop = hdrH + 18 + SLOT_OVERHANG_T;          // position souhaitée du haut de la table
-        var shrinkageV       = (1 - scale) * (TABLE_H + SLOT_OVERHANG_T); // espace récupéré
-        table.style.marginTop    = Math.max(naturalMarginTop - shrinkageV / 2, hdrH + 8) + 'px';
+        var naturalMarginTop = hdrEff + 18 + ovhT;
+        var shrinkageV       = (1 - scale) * (TABLE_H + ovhT);
+        table.style.marginTop    = Math.max(naturalMarginTop - shrinkageV / 2, hdrEff + 6) + 'px';
         table.style.marginBottom = '0px';
     }
 

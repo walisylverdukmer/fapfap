@@ -1,5 +1,5 @@
 /* =====================================================
-   FAP FAP 2.1 — Game Layout CSS
+   FAP FAP 2.2 — Game Layout CSS
    Moteur responsive pour la table de jeu
    -----------------------------------------------------
    Charge APRÈS style.css dans game.html
@@ -145,30 +145,43 @@ body {
     display: flex;
     gap: 5px;
     z-index: 100;
-    pointer-events: none;
-    min-width: 150px;
+    pointer-events: none;    /* les cartes individuelles ont pointer-events:auto */
     justify-content: flex-start;
     align-items: center;
-    flex-direction: row;
 }
-.pz-1 { bottom: 10px; left: calc(50% + 85px); }
-.pz-2 { top:    10px; left: calc(50% + 85px); }
-.pz-3 { left:   50px; top:  calc(50% + 40px); }
-.pz-4 { right: -80px; top:  calc(50% + 40px); }
+/* Player 1 (moi) : bas, légèrement à gauche du centre */
+.pz-1 { bottom: 14px; left: calc(50% - 160px); flex-direction: row; }
+/* Player 2 (haut) : haut, même alignement */
+.pz-2 { top:    14px; left: calc(50% - 160px); flex-direction: row; }
+/* Player 3 (gauche) : colonne verticale côté gauche, dans la table */
+.pz-3 { left:   22px; top: calc(50% - 105px);  flex-direction: column; gap: 4px; }
+/* Player 4 (droite) : colonne verticale côté droit, dans la table */
+.pz-4 { right:  22px; top: calc(50% - 105px);  flex-direction: column; gap: 4px; }
 
 /* ── Cartes sur la table ─────────────────────────── */
 .card-on-table {
-    width: 42px; height: 62px;
+    width: 58px; height: 86px;
     background: white;
-    border-radius: 4px;
+    border-radius: 6px;
     display: flex; flex-direction: column;
-    justify-content: center; align-items: center;
-    font-weight: bold; font-size: 0.95rem;
-    border: 1px solid #000; color: #000;
-    box-shadow: 2px 2px 6px rgba(0,0,0,0.5);
+    justify-content: space-between;
+    padding: 5px 4px;
+    font-weight: bold; font-size: 1.15rem;
+    border: 1.5px solid #222; color: #000;
+    box-shadow: 2px 4px 10px rgba(0,0,0,0.6);
     animation: quickPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    /* Zoom on tap — les cartes sont cliquables */
+    pointer-events: auto;
+    cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.12s;
+    user-select: none;
 }
-@keyframes quickPop { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.card-on-table:hover,
+.card-on-table:active { transform: scale(1.12) translateY(-4px); box-shadow: 3px 6px 18px rgba(0,0,0,0.7); z-index: 120; }
+.card-on-table .cv    { font-size: 1.15rem; line-height: 1; }
+.card-on-table .cs    { font-size: 1.4rem;  line-height: 1; align-self: flex-end; transform: rotate(180deg); }
+
+@keyframes quickPop { from { transform: scale(1.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* ── Slots joueurs ───────────────────────────────── */
 .player-slot {
@@ -223,28 +236,32 @@ body {
     color: white; display: inline-block; min-width: 80px;
 }
 
-/* ── Cartes en main ──────────────────────────────── */
+/* ── Cartes en main (joueur local) ──────────────── */
 .hand {
     display: flex; justify-content: center;
-    height: 100px; margin-bottom: 10px;
+    height: 110px; margin-bottom: 10px;
 }
 .card-img {
-    width: 65px; height: 95px;
-    background: white; border-radius: 6px;
-    border: 1px solid #333; margin-left: -20px;
+    width: 74px; height: 108px;
+    background: white; border-radius: 8px;
+    border: 1.5px solid #333; margin-left: -22px;
     display: flex; flex-direction: column;
-    justify-content: space-around;
-    font-weight: bold; font-size: 1.3rem;
-    cursor: pointer; transition: transform 0.15s;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.4); color: #000;
+    justify-content: space-between;
+    padding: 5px 5px;
+    font-weight: bold; font-size: 1.4rem;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 5px 14px rgba(0,0,0,0.5); color: #000;
+    user-select: none;
 }
-.card-img:hover:not(.folded) { transform: translateY(-8px); z-index: 50; }
+.card-img .cv { font-size: 1.3rem; line-height: 1; }
+.card-img .cs { font-size: 1.6rem; line-height: 1; align-self: flex-end; }
+.card-img:hover:not(.folded) { transform: translateY(-12px); z-index: 50; box-shadow: 0 12px 24px rgba(0,0,0,0.6); }
 .card-img.folded { opacity: 0.4; cursor: default; }
 .red { color: var(--card-red) !important; }
 
 /* ── Mini-mains adversaires ──────────────────────── */
-.mini-hand    { display: flex; justify-content: center; height: 30px; margin-top: 5px; }
-.card-back    { width: 18px; height: 26px; background: #c0392b; border: 1px solid white; border-radius: 3px; margin-left: -8px; }
+.mini-hand    { display: flex; justify-content: center; height: 32px; margin-top: 5px; }
+.card-back    { width: 20px; height: 29px; background: #c0392b; border: 1px solid white; border-radius: 3px; margin-left: -9px; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); }
 
 /* ── Zone pot central ────────────────────────────── */
 .pot-area       { z-index: 10; text-align: center; position: relative; }
@@ -325,11 +342,57 @@ body {
 .ct-btn-cancel:hover { border-color: #888; color: #fff; }
 
 /* =====================================================
+   MODAL ZOOM CARTE (tap sur une carte de la table)
+   ===================================================== */
+#card-zoom-modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    z-index: 8000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+#card-zoom-modal.open { display: flex; }
+
+.card-zoom-inner {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 14px;
+    pointer-events: none;
+}
+.card-zoom-face {
+    width: 150px; height: 220px;
+    background: white; border-radius: 14px;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 10px;
+    font-weight: bold; color: #000;
+    border: 3px solid #333;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    animation: zoomCardPop 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+.card-zoom-face.red { color: var(--card-red); }
+@keyframes zoomCardPop {
+    from { transform: scale(0.4) rotate(-6deg); opacity: 0; }
+    to   { transform: scale(1)   rotate(0deg);  opacity: 1; }
+}
+.czv-top     { font-size: 2.6rem; line-height: 1; }
+.czs-center  { font-size: 5rem;   line-height: 1; text-align: center; }
+.czv-bottom  { font-size: 2.6rem; line-height: 1; transform: rotate(180deg); align-self: flex-end; }
+
+#card-zoom-player {
+    color: #ccc; font-size: 0.92rem; font-style: italic;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+}
+#card-zoom-hint {
+    color: #555; font-size: 0.75rem;
+}
+
+/* =====================================================
    DRAWERS MOBILES (chat + historique en tiroir)
-   Activés automatiquement par game-scale.js < 768px
    ===================================================== */
 
-/* Boutons tiroir flottants — cachés par défaut sur desktop */
 .drawer-toggle {
     display: none;
     position: fixed;
@@ -348,7 +411,6 @@ body {
 .drawer-toggle-history        { top: calc(var(--header-h) + 10px); left: 8px; }
 .drawer-toggle-chat           { top: calc(var(--header-h) + 10px); right: 8px; }
 
-/* Overlay tiroir */
 .drawer-overlay {
     display: none;
     position: fixed; inset: 0;
@@ -358,11 +420,9 @@ body {
 }
 .drawer-overlay.open { display: block; }
 
-/* État tiroir ouvert */
 .history-panel.drawer-open { transform: translateX(0) !important; }
 .chat-panel.drawer-open    { transform: translateX(0) !important; }
 
-/* Bouton fermeture tiroir — caché par défaut, visible sur mobile */
 .drawer-close-btn {
     display: none;
     background: transparent;
@@ -394,25 +454,20 @@ body {
 .orientation-hint  { font-size: 0.95rem; color: #aaa; max-width: 280px; }
 
 /* =====================================================
-   RESPONSIVE — 4 breakpoints
+   RESPONSIVE
    ===================================================== */
 
-/* 1100px — Desktop compact : sidebars plus étroites */
+/* 1100px — Desktop compact */
 @media (max-width: 1100px) {
-    :root {
-        --sidebar-w: 180px;
-        --chat-w:    190px;
-    }
-    .admin-header h1  { font-size: 1.1rem; }
-    .btn-action       { padding: 6px 10px; font-size: 0.78rem; }
-    .poker-table      { /* scale via JS */ }
+    :root { --sidebar-w: 180px; --chat-w: 190px; }
+    .admin-header h1 { font-size: 1.1rem; }
+    .btn-action      { padding: 6px 10px; font-size: 0.78rem; }
 }
 
-/* 768px — Tablette : sidebars → tiroirs */
-@media (max-width: 768px) {
+/* 900px — Tablette / mobile : sidebars → tiroirs */
+@media (max-width: 900px) {
     body { overflow: hidden; }
 
-    /* Masquer les sidebars hors tiroir */
     .history-panel {
         transform: translateX(calc(-100% - 25px));
         top: 0; bottom: 0; border-radius: 0 10px 10px 0;
@@ -427,49 +482,80 @@ body {
         right: 0;
     }
 
-    /* Afficher les boutons tiroir et fermeture */
     .drawer-toggle    { display: flex; align-items: center; gap: 4px; }
     .drawer-close-btn { display: flex; }
 
-    /* Winner modal adapté */
-    .modal-content { padding: 24px; }
+    .modal-content     { padding: 24px; }
     .winner-avatar-big { width: 100px; height: 100px; }
 
-    /* Pot area plus compact */
-    .pot-area h1 { font-size: 1.6rem; }
-    .card-img    { width: 52px; height: 78px; font-size: 1.1rem; }
-    .card-on-table { width: 34px; height: 50px; font-size: 0.8rem; }
+    .pot-area h1   { font-size: 1.6rem; }
+    .card-img      { width: 60px; height: 88px; font-size: 1.15rem; margin-left: -18px; }
+    .card-img .cv  { font-size: 1.15rem; }
+    .card-img .cs  { font-size: 1.35rem; }
+    .hand          { height: 96px; }
+    .card-on-table { width: 46px; height: 68px; font-size: 0.92rem; }
+    .card-on-table .cv { font-size: 0.92rem; }
+    .card-on-table .cs { font-size: 1.1rem; }
 
-    /* Annonce plein écran */
-    #announcement { font-size: 2.2rem; }
-
-    /* Timer compact */
-    #timer-bar-bg { width: 60px; }
-    #timer-sec    { font-size: 0.75rem; }
+    #announcement  { font-size: 2.2rem; }
+    #timer-bar-bg  { width: 60px; }
+    #timer-sec     { font-size: 0.75rem; }
 }
 
-/* 480px — Mobile petit : tout encore plus compact */
-@media (max-width: 480px) {
+/* Paysage mobile : header ultra-compact + overhangs réduits */
+@media (max-width: 900px) and (orientation: landscape) {
+    :root { --header-h: 44px; }
+    .admin-header  { height: 44px; padding: 0 10px; }
+    .admin-header h1 { font-size: 0.88rem; gap: 6px; }
+    .btn-action    { padding: 5px 9px; font-size: 0.75rem; }
+    #turn-timer    { display: flex !important; }
+    #timer-bar-bg  { width: 52px; }
+
+    /* Slots plus serrés contre la table */
+    .p-top    { top: -30px; }
+    .p-bottom { bottom: -50px; }
+    .p-left   { left: -75px; }
+    .p-right  { right: -75px; }
+    .hand     { height: 80px; margin-bottom: 4px; }
+    .avatar   { width: 50px; height: 50px; }
+    .name-tag { font-size: 0.68rem; padding: 2px 7px; margin-top: 4px; min-width: 60px; }
+
+    /* Cartes en main un peu plus grandes pour visibilité */
+    .card-img     { width: 56px; height: 82px; font-size: 1.05rem; margin-left: -16px; }
+    .card-img .cv { font-size: 1.05rem; }
+    .card-img .cs { font-size: 1.25rem; }
+    /* Cartes sur table */
+    .card-on-table { width: 42px; height: 62px; font-size: 0.85rem; }
+    .card-on-table .cv { font-size: 0.85rem; }
+    .card-on-table .cs { font-size: 1rem; }
+
+    /* Pot et mini-main compacts */
+    .pot-area h1 { font-size: 1.3rem; }
+    .mini-hand   { height: 26px; }
+    .card-back   { width: 16px; height: 23px; }
+
+    .drawer-toggle-history { top: calc(44px + 6px); }
+    .drawer-toggle-chat    { top: calc(44px + 6px); }
+}
+
+/* 480px — Mobile très petit */
+@media (max-width: 480px) and (orientation: portrait) {
     .admin-header    { padding: 0 10px; }
     .admin-header h1 { font-size: 0.95rem; gap: 5px; }
     .btn-action      { padding: 5px 8px; font-size: 0.72rem; }
-    #turn-timer      { display: none !important; } /* masqué sur très petit écran */
+    #turn-timer      { display: none !important; }
 
-    .card-img     { width: 44px; height: 65px; font-size: 0.95rem; margin-left: -14px; }
-    .card-on-table { width: 28px; height: 42px; font-size: 0.72rem; }
-    .avatar       { width: 55px; height: 55px; }
-    .name-tag     { font-size: 0.72rem; padding: 3px 8px; }
+    .card-img      { width: 52px; height: 76px; font-size: 1rem; margin-left: -15px; }
+    .card-on-table { width: 38px; height: 56px; font-size: 0.78rem; }
+    .avatar        { width: 55px; height: 55px; }
+    .name-tag      { font-size: 0.72rem; padding: 3px 8px; }
 
-    .pot-area h1  { font-size: 1.2rem; }
-    #announcement { font-size: 1.7rem; top: 30%; }
-
-    .btn-special  { padding: 7px 12px; font-size: 0.78rem; }
+    .pot-area h1   { font-size: 1.2rem; }
+    #announcement  { font-size: 1.7rem; top: 30%; }
+    .btn-special   { padding: 7px 12px; font-size: 0.78rem; }
 }
 
 /* 1400px+ — Grand écran : sidebars élargies */
 @media (min-width: 1400px) {
-    :root {
-        --sidebar-w: 260px;
-        --chat-w:    270px;
-    }
+    :root { --sidebar-w: 260px; --chat-w: 270px; }
 }

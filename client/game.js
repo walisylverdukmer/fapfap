@@ -363,15 +363,16 @@ function renderHand() {
     const handDiv = document.getElementById('my-hand');
     if(!handDiv) return;
     handDiv.innerHTML = '';
+    const icons = { spade: '♠', heart: '♥', club: '♣', diamond: '♦' };
     myHand.forEach((card, index) => {
         const cardEl = document.createElement('div');
-        const icons = { spade: '♠', heart: '♥', club: '♣', diamond: '♦' };
-        const isRed = (card.suit === 'heart' || card.suit === 'diamond');
+        const isRed  = (card.suit === 'heart' || card.suit === 'diamond');
         cardEl.className = `card-img ${isRed ? 'red' : ''} ${(hasFolded || isPassing) ? 'folded' : ''}`;
-        cardEl.innerHTML = `<span>${card.value}</span><span>${icons[card.suit]}</span>`;
+        cardEl.innerHTML = `<span class="cv">${card.value}</span><span class="cs">${icons[card.suit]}</span>`;
         cardEl.onclick = () => {
-            if(hasFolded || isPassing) return; 
+            if(hasFolded || isPassing) return;
             if(isMyTurn) playCard(index);
+            else showCardZoom(card.value, card.suit, null); // hors tour → affiche en grand
         };
         handDiv.appendChild(cardEl);
     });
@@ -417,7 +418,10 @@ socket.on('display-card', (data) => {
 
     const cardOnTable = document.createElement('div');
     cardOnTable.className = `card-on-table ${isRed ? 'red' : ''}`;
-    cardOnTable.innerHTML = `<span>${data.card.value}</span><span>${icons[data.card.suit]}</span>`;
+    cardOnTable.innerHTML = `<span class="cv">${data.card.value}</span><span class="cs">${icons[data.card.suit]}</span>`;
+    // Tap/clic → zoom plein écran
+    const playerName = document.getElementById(slotNum === 1 ? 'my-name' : `n-${slotNum}`)?.innerText || '';
+    cardOnTable.onclick = () => showCardZoom(data.card.value, data.card.suit, playerName);
 
     if(targetZone) targetZone.appendChild(cardOnTable);
 
@@ -720,6 +724,40 @@ function selectChangeTable(newTableId) {
         to_table_id:   newTableId
     });
     closeChangeTable();
+}
+
+// =====================================================
+// ZOOM CARTE (tap sur une carte posée sur la table)
+// =====================================================
+
+const CARD_ICONS = { spade: '♠', heart: '♥', club: '♣', diamond: '♦' };
+
+function showCardZoom(value, suit, playerName) {
+    const modal   = document.getElementById('card-zoom-modal');
+    const face    = document.getElementById('card-zoom-face');
+    const top     = document.getElementById('czv-top');
+    const center  = document.getElementById('czs-center');
+    const bottom  = document.getElementById('czv-bottom');
+    const playerEl= document.getElementById('card-zoom-player');
+    if (!modal || !face) return;
+
+    const icon  = CARD_ICONS[suit] || suit;
+    const isRed = suit === 'heart' || suit === 'diamond';
+
+    face.className = `card-zoom-face${isRed ? ' red' : ''}`;
+    top.textContent    = value;
+    center.textContent = icon;
+    bottom.textContent = value;
+
+    playerEl.textContent = playerName && playerName !== 'Vide' && playerName !== 'Spectateur'
+        ? `Jouée par ${playerName.replace(/\s*\(.*\)/, '').trim()}`
+        : '';
+
+    modal.classList.add('open');
+}
+
+function closeCardZoom() {
+    document.getElementById('card-zoom-modal')?.classList.remove('open');
 }
 
 socket.on('change-table-ack', (data) => {
