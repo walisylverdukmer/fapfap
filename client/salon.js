@@ -553,23 +553,36 @@ async function submitTokenRequest() {
 // ADMIN — CRÉER UNE TABLE
 // =====================================================
 
+function onTableTypeChange(type) {
+    const betInput = document.getElementById('new-table-bet');
+    if (type === 'academy') {
+        betInput.value       = 500;
+        betInput.placeholder = 'Mise min (JETONS)';
+    } else {
+        betInput.value       = 100;
+        betInput.placeholder = 'Mise min (FCFA)';
+    }
+}
+
 function createTable() {
+    const table_type  = document.getElementById('new-table-type')?.value  || 'real';
     const name        = document.getElementById('new-table-name').value.trim();
-    const min_bet     = parseInt(document.getElementById('new-table-bet').value)     || 100;
+    const min_bet     = parseInt(document.getElementById('new-table-bet').value)     || (table_type === 'academy' ? 500 : 100);
     const max_players = parseInt(document.getElementById('new-table-players').value) || 4;
+    const currency    = table_type === 'academy' ? 'JETONS' : 'FCFA';
 
     if (!name) { showToast('Donnez un nom à la table.', true); return; }
 
     fetch(BACKEND_URL + '/api/salon/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ name, min_bet, max_players })
+        body: JSON.stringify({ name, min_bet, max_players, table_type, currency })
     })
     .then(r => r.json())
     .then(data => {
         if (data.msg && !data.id) { showToast(data.msg, true); return; }
         document.getElementById('new-table-name').value = '';
-        showToast('Table créée avec succès.');
+        showToast('Table ' + (table_type === 'academy' ? 'Académie' : 'Réelle') + ' créée.');
     })
     .catch(() => showToast('Erreur réseau.', true));
 }

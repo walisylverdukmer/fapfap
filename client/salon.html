@@ -297,8 +297,12 @@
         <div class="admin-panel" id="admin-panel">
             <h3>Créer une table</h3>
             <div class="form-row">
-                <input type="text"   id="new-table-name"     placeholder="Nom de la table" maxlength="50">
-                <input type="number" id="new-table-bet"      placeholder="Mise min (FCFA)" value="100" min="0">
+                <select id="new-table-type" onchange="onTableTypeChange(this.value)">
+                    <option value="real">Réelle (FCFA)</option>
+                    <option value="academy">Académie (JETONS)</option>
+                </select>
+                <input type="text"   id="new-table-name"    placeholder="Nom de la table" maxlength="50">
+                <input type="number" id="new-table-bet"     placeholder="Mise min" value="100" min="0">
                 <select             id="new-table-players">
                     <option value="2">2 joueurs</option>
                     <option value="4" selected>4 joueurs</option>

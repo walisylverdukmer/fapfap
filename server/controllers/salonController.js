@@ -29,16 +29,17 @@ exports.getTableByToken = async (req, res) => {
 
 // POST /api/salon/tables — créer une table (superadmin ou katika)
 exports.createTable = async (req, res) => {
-    const { name, min_bet, max_players } = req.body;
+    const { name, min_bet, max_players, table_type = 'real', currency } = req.body;
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ msg: 'Le nom de la table est requis.' });
     }
+    const resolvedCurrency = currency || (table_type === 'academy' ? 'JETONS' : 'FCFA');
     try {
         const { rows } = await db.query(
-            `INSERT INTO salon_tables (name, min_bet, max_players, created_by)
-             VALUES ($1, $2, $3, $4)
-             RETURNING id, name, min_bet, max_players, status, invite_token`,
-            [name.trim(), min_bet || 100, max_players || 4, req.user.id]
+            `INSERT INTO salon_tables (name, min_bet, max_players, created_by, table_type, currency)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, name, min_bet, max_players, status, invite_token, table_type, currency`,
+            [name.trim(), min_bet || 100, max_players || 4, req.user.id, table_type, resolvedCurrency]
         );
         const newTable = rows[0];
 
