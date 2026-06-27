@@ -211,6 +211,17 @@ function startTurnTimer(tableId) {
             if (pr) { if (pr.timer) clearTimeout(pr.timer); pendingReconnect.delete(current.dbId); }
         }
 
+        // Retirer immédiatement un joueur déconnecté après auto-fold — pas de fantôme
+        if (current.disconnected) {
+            const pIdx = t.players.indexOf(current);
+            if (pIdx !== -1) {
+                t.players.splice(pIdx, 1);
+                if (t.dealerIndex > pIdx && t.dealerIndex > 0) t.dealerIndex--;
+                if (t.turnIndex   > pIdx && t.turnIndex   > 0) t.turnIndex--;
+            }
+            if (tableId.startsWith('salon_')) scheduleBroadcastSalonState();
+        }
+
         const active = t.players.filter(p => p.isInHand);
         if (active.length === 1) {
             routeGameOver(tableId, active[0], t.pot, 'TOUS BANQUÉ (timeout)', t.clubId, 'tous_banque');
@@ -500,7 +511,18 @@ async function handleGameOver(tableId, winner, pot, reason, club_id, winType = '
 
     table.status        = 'WAITING';
     table.gameSessionId = null;
-    table.dealerIndex   = table.players.findIndex(p => p.id === winner.id);
+
+    // Purger les joueurs déconnectés — invariant : aucun fantôme entre deux manches
+    table.players = table.players.filter(p => {
+        if (p.id === winner.id || !p.disconnected) return true;
+        if (p.dbId && tableId.startsWith('salon_')) {
+            const sid = parseInt(tableId.replace('salon_', ''), 10);
+            db.query('DELETE FROM table_seats WHERE table_id=$1 AND user_id=$2', [sid, p.dbId]).catch(() => {});
+        }
+        return false;
+    });
+    table.dealerIndex = table.players.findIndex(p => p.id === winner.id);
+    if (tableId.startsWith('salon_')) scheduleBroadcastSalonState();
 
     const logMsg = commission > 0
         ? `VICTOIRE de ${winner.username} — gain: ${winnerGain} FCFA | commission Wali: ${commission} FCFA.`
@@ -613,7 +635,18 @@ async function handleAcademyGameOver(tableId, winner, pot, reason, winType = 'no
 
     table.status        = 'WAITING';
     table.gameSessionId = null;
-    table.dealerIndex   = table.players.findIndex(p => p.id === winner.id);
+
+    // Purger les joueurs déconnectés — invariant : aucun fantôme entre deux manches
+    table.players = table.players.filter(p => {
+        if (p.id === winner.id || !p.disconnected) return true;
+        if (p.dbId && tableId.startsWith('salon_')) {
+            const sid = parseInt(tableId.replace('salon_', ''), 10);
+            db.query('DELETE FROM table_seats WHERE table_id=$1 AND user_id=$2', [sid, p.dbId]).catch(() => {});
+        }
+        return false;
+    });
+    table.dealerIndex = table.players.findIndex(p => p.id === winner.id);
+    if (tableId.startsWith('salon_')) scheduleBroadcastSalonState();
 
     logAction(tableId, `VICTOIRE de ${winner.username} — gain: ${winnerGain} JETONS.`, 'victory');
 
@@ -693,6 +726,7 @@ function handleDeparture(socket, tableId) {
                     if (rt.turnIndex   > ppIdx2 && rt.turnIndex   > 0) rt.turnIndex--;
                 }
                 io.to(tableId).emit('player-list-update', rt.players);
+                if (tableId.startsWith('salon_')) scheduleBroadcastSalonState();
 
                 const active = rt.players.filter(p2 => p2.isInHand);
                 if (active.length === 1) {
@@ -772,7 +806,7 @@ async function broadcastSalonState() {
             const ram = tables[`salon_${row.table_id}`];
             return {
                 ...row,
-                live_players: ram ? ram.players.length : Number(row.seated_count),
+                live_players: ram ? ram.players.filter(p => !p.disconnected).length : Number(row.seated_count),
                 game_status:  ram ? ram.status : 'WAITING'
             };
         });
@@ -993,6 +1027,19 @@ io.on('connection', (socket) => {
             socket.emit('game-start-failed', { message: 'Une partie est déjà en cours sur cette table.' });
             return;
         }
+
+        // Purger les fantômes déconnectés avant la distribution
+        const dealerBefore = table.players[table.dealerIndex];
+        table.players = table.players.filter(p => !p.disconnected);
+        if (dealerBefore) {
+            const newIdx = table.players.findIndex(p => p.id === dealerBefore.id);
+            if (newIdx !== -1) table.dealerIndex = newIdx;
+        }
+        if (table.players.length < 2) {
+            socket.emit('game-start-failed', { message: 'Pas assez de joueurs actifs pour démarrer.' });
+            return;
+        }
+
         const dealer = table.players[table.dealerIndex];
         if (socket.id !== dealer.id) return;
 
@@ -1326,7 +1373,7 @@ io.on('connection', (socket) => {
                 const ram = tables[`salon_${row.table_id}`];
                 return {
                     ...row,
-                    live_players: ram ? ram.players.length : Number(row.seated_count),
+                    live_players: ram ? ram.players.filter(p => !p.disconnected).length : Number(row.seated_count),
                     game_status:  ram ? ram.status : 'WAITING'
                 };
             });
@@ -1652,16 +1699,42 @@ io.on('connection', (socket) => {
             }
         }
 
-        // Retirer de la RAM uniquement si pas de partie en cours
         const table = tables[tableId];
-        if (table && table.status === 'WAITING') {
+        if (table) {
             const pIdx = table.players.findIndex(p => p.id === socket.id);
             if (pIdx !== -1) {
-                const player = table.players[pIdx];
-                table.players.splice(pIdx, 1);
-                logAction(tableId, `${player.username} a quitté la table.`);
-                io.to(tableId).emit('player-list-update', table.players);
-                if (table.players.length === 0) delete tables[tableId];
+                const player    = table.players[pIdx];
+                const wasInTurn = (table.turnIndex === pIdx);
+                if (table.status === 'PLAYING') {
+                    // Départ volontaire en cours de partie : banque immédiate (pas de fenêtre reconnexion)
+                    clearTurnTimer(tableId);
+                    player.isInHand = false;
+                    player.hand     = [];
+                    // Annuler fenêtre de reconnexion si en attente
+                    if (player.dbId && pendingReconnect.has(player.dbId)) {
+                        const pr = pendingReconnect.get(player.dbId);
+                        if (pr?.timer) clearTimeout(pr.timer);
+                        pendingReconnect.delete(player.dbId);
+                    }
+                    table.players.splice(pIdx, 1);
+                    if (table.dealerIndex > pIdx && table.dealerIndex > 0) table.dealerIndex--;
+                    if (table.turnIndex   > pIdx && table.turnIndex   > 0) table.turnIndex--;
+                    logAction(tableId, `${player.username} a quitté la table en cours de partie.`);
+                    io.to(tableId).emit('player-folded', { id: socket.id, username: player.username });
+                    io.to(tableId).emit('player-list-update', table.players);
+                    const active = table.players.filter(p => p.isInHand);
+                    if (active.length === 1) {
+                        routeGameOver(tableId, active[0], table.pot, 'TOUS BANQUÉ (départ)', table.clubId, 'tous_banque');
+                    } else if (active.length > 1 && wasInTurn) {
+                        startTurnTimer(tableId);
+                    }
+                } else {
+                    // Table en attente : retrait simple
+                    table.players.splice(pIdx, 1);
+                    logAction(tableId, `${player.username} a quitté la table.`);
+                    io.to(tableId).emit('player-list-update', table.players);
+                    if (table.players.length === 0) delete tables[tableId];
+                }
             }
         }
 
@@ -1688,12 +1761,37 @@ io.on('connection', (socket) => {
             }
         }
         const fromTable = tables[fromKey];
-        if (fromTable && fromTable.status === 'WAITING') {
+        if (fromTable) {
             const pIdx = fromTable.players.findIndex(p => p.id === socket.id);
             if (pIdx !== -1) {
-                fromTable.players.splice(pIdx, 1);
-                io.to(fromKey).emit('player-list-update', fromTable.players);
-                if (fromTable.players.length === 0) delete tables[fromKey];
+                const player    = fromTable.players[pIdx];
+                const wasInTurn = (fromTable.turnIndex === pIdx);
+                if (fromTable.status === 'PLAYING') {
+                    // Changement de table en cours de partie : banque immédiate
+                    clearTurnTimer(fromKey);
+                    player.isInHand = false;
+                    player.hand     = [];
+                    if (player.dbId && pendingReconnect.has(player.dbId)) {
+                        const pr = pendingReconnect.get(player.dbId);
+                        if (pr?.timer) clearTimeout(pr.timer);
+                        pendingReconnect.delete(player.dbId);
+                    }
+                    fromTable.players.splice(pIdx, 1);
+                    if (fromTable.dealerIndex > pIdx && fromTable.dealerIndex > 0) fromTable.dealerIndex--;
+                    if (fromTable.turnIndex   > pIdx && fromTable.turnIndex   > 0) fromTable.turnIndex--;
+                    io.to(fromKey).emit('player-folded', { id: socket.id, username: player.username });
+                    io.to(fromKey).emit('player-list-update', fromTable.players);
+                    const active = fromTable.players.filter(p => p.isInHand);
+                    if (active.length === 1) {
+                        routeGameOver(fromKey, active[0], fromTable.pot, 'TOUS BANQUÉ (changement table)', fromTable.clubId, 'tous_banque');
+                    } else if (active.length > 1 && wasInTurn) {
+                        startTurnTimer(fromKey);
+                    }
+                } else {
+                    fromTable.players.splice(pIdx, 1);
+                    io.to(fromKey).emit('player-list-update', fromTable.players);
+                    if (fromTable.players.length === 0) delete tables[fromKey];
+                }
             }
         }
         socket.leave(fromKey);
@@ -1830,6 +1928,23 @@ setInterval(async () => {
         console.error('[STATUS CHECK]', err.message);
     }
 }, 60_000);
+
+// Nettoyage périodique des joueurs fantômes (tables en WAITING uniquement)
+setInterval(() => {
+    let changed = false;
+    for (const tableId of Object.keys(tables)) {
+        const table = tables[tableId];
+        if (!table || table.status === 'PLAYING') continue;
+        const before = table.players.length;
+        table.players = table.players.filter(p => !p.disconnected);
+        if (table.players.length !== before) {
+            if (table.players.length === 0) { delete tables[tableId]; }
+            else io.to(tableId).emit('player-list-update', table.players);
+            changed = true;
+        }
+    }
+    if (changed) scheduleBroadcastSalonState();
+}, 30_000);
 
 // ============================================================
 const PORT = process.env.PORT || 5000;

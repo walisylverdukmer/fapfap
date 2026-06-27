@@ -366,6 +366,92 @@ test('IPs différentes ne s\'influencent pas', () => {
 });
 
 // ============================================================
+// 7. COHÉRENCE ÉTAT DES JOUEURS
+// ============================================================
+
+// Simuler broadcastSalonState : live_players exclut les déconnectés
+function countLivePlayers(players) {
+    return players.filter(p => !p.disconnected).length;
+}
+
+test('broadcastSalonState — exclut les joueurs déconnectés du compteur', () => {
+    const players = [
+        { id: '1', username: 'Alice', disconnected: false },
+        { id: '2', username: 'Bob',   disconnected: true  },
+        { id: '3', username: 'Carol', disconnected: false },
+    ];
+    assert.strictEqual(countLivePlayers(players), 2);
+});
+
+test('broadcastSalonState — tous connectés', () => {
+    const players = [
+        { id: '1', username: 'A', disconnected: false },
+        { id: '2', username: 'B', disconnected: false },
+    ];
+    assert.strictEqual(countLivePlayers(players), 2);
+});
+
+// Simuler purge fantômes après manche (handleGameOver)
+function purgeAfterGame(players, winnerId) {
+    return players.filter(p => p.id === winnerId || !p.disconnected);
+}
+
+test('handleGameOver — purge les joueurs déconnectés sauf le gagnant', () => {
+    const players = [
+        { id: 'w1', username: 'Winner', disconnected: false },
+        { id: 'p2', username: 'Ghost1', disconnected: true  },
+        { id: 'p3', username: 'Live',   disconnected: false },
+    ];
+    const result = purgeAfterGame(players, 'w1');
+    assert.strictEqual(result.length, 2);
+    assert.ok(result.find(p => p.id === 'w1'), 'Gagnant conservé');
+    assert.ok(!result.find(p => p.id === 'p2'), 'Fantôme supprimé');
+    assert.ok(result.find(p => p.id === 'p3'), 'Joueur actif conservé');
+});
+
+test('handleGameOver — gagnant déconnecté conservé malgré tout', () => {
+    const players = [
+        { id: 'wdc', username: 'WinnerDC', disconnected: true },
+        { id: 'p2',  username: 'Ghost',    disconnected: true },
+    ];
+    const result = purgeAfterGame(players, 'wdc');
+    assert.strictEqual(result.length, 1);
+    assert.ok(result.find(p => p.id === 'wdc'));
+});
+
+// Simuler start-game : purge avant distribution
+function purgeBeforeStart(players, dealerIndex) {
+    const dealerBefore = players[dealerIndex];
+    const filtered = players.filter(p => !p.disconnected);
+    let newDealerIdx = dealerBefore
+        ? filtered.findIndex(p => p.id === dealerBefore.id)
+        : -1;
+    if (newDealerIdx === -1) newDealerIdx = 0;
+    return { players: filtered, dealerIndex: newDealerIdx };
+}
+
+test('start-game — retire les fantômes avant distribution', () => {
+    const players = [
+        { id: 'p1', username: 'Active1', disconnected: false },
+        { id: 'p2', username: 'Ghost',   disconnected: true  },
+        { id: 'p3', username: 'Active2', disconnected: false },
+    ];
+    const { players: result, dealerIndex } = purgeBeforeStart(players, 0);
+    assert.strictEqual(result.length, 2);
+    assert.ok(!result.find(p => p.disconnected), 'Aucun fantôme restant');
+    assert.strictEqual(result[dealerIndex].id, 'p1', 'Dealer préservé');
+});
+
+test('start-game — assez de joueurs actifs', () => {
+    const players = [
+        { id: 'p1', disconnected: false },
+        { id: 'p2', disconnected: true  },
+    ];
+    const { players: result } = purgeBeforeStart(players, 0);
+    assert.strictEqual(result.length, 1); // < 2 → pas suffisant
+});
+
+// ============================================================
 // RÉSULTAT FINAL
 // ============================================================
 
