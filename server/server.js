@@ -796,6 +796,19 @@ io.on('connection', (socket) => {
         if (!token) return;
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+            // Connexion unique : expulser l'ancienne session si elle existe encore
+            const prevSocketId = connectedSockets.get(decoded.id);
+            if (prevSocketId && prevSocketId !== socket.id) {
+                const prevSocket = io.sockets.sockets.get(prevSocketId);
+                if (prevSocket) {
+                    prevSocket.emit('force-disconnect', {
+                        reason: 'Votre compte a été connecté depuis un autre appareil ou onglet.'
+                    });
+                    prevSocket.disconnect(true);
+                }
+            }
+
             socket.data.user = decoded;
             socket.userId    = decoded.id;
             socket.userRole  = decoded.role;

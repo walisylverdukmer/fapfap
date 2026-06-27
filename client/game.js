@@ -274,9 +274,7 @@ function updateActionPanel() {
     const actionContainer = document.getElementById('special-actions');
     if(!actionContainer) return;
     
-    actionContainer.style.top = "auto";
-    actionContainer.style.bottom = "-110px"; 
-    actionContainer.innerHTML = ''; 
+    actionContainer.innerHTML = '';
 
     // Bouton PASS
     if (isMyTurn && myHand.length === 2 && !isPassing && !hasFolded) {
@@ -439,9 +437,6 @@ socket.on('player-status-pass', (data) => {
 socket.on('display-card', (data) => {
     cardsPlayedInRound++;
 
-    // Début d'un nouveau pli : effacer les cartes atténuées du pli précédent
-    if (document.querySelectorAll('.trick-played').length > 0) clearBoard();
-
     // Retrait de la carte de MA main uniquement quand le serveur confirme
     if (data.playerId === socket.id) {
         myHand = myHand.filter(c => !(c.suit === data.card.suit && c.value === data.card.value));
@@ -502,8 +497,9 @@ socket.on('clear-table', (data) => {
     isMyTurn = (socket.id === data.winnerId);
     updateTurnUI(data.winnerId);
     updateActionPanel();
-    // Cartes du pli atténuées — elles restent visibles jusqu'au premier coup du pli suivant
-    document.querySelectorAll('.card-table-wrapper').forEach(el => el.classList.add('trick-played'));
+    // Archiver les cartes du pli dans l'historique, puis vider les zones pour le pli suivant
+    archiveTrickToHistory();
+    clearBoard();
 });
 
 socket.on('next-turn', (data) => {
@@ -532,6 +528,7 @@ socket.on('game-over', (data) => {
     cardsPlayedInRound = 0;
     renderHand();
     clearBoard();
+    clearTricksHistory();
     const actionsEl = document.getElementById('special-actions');
     actionsEl.innerHTML = '';
     if (salonTableId) {
@@ -595,10 +592,40 @@ socket.on('force-disconnect', (data) => {
 
 // --- 7. UTILITAIRES & ACTIONS JOUEUR ---
 function clearBoard() {
-    for(let i=1; i<=4; i++) {
+    for (let i = 1; i <= 4; i++) {
         const pz = document.getElementById(`pz-${i}`);
-        if(pz) pz.innerHTML = "";
+        if (pz) pz.innerHTML = '';
     }
+}
+
+function archiveTrickToHistory() {
+    const histEl = document.getElementById('tricks-history');
+    if (!histEl) return;
+    const row = document.createElement('div');
+    row.className = 'trick-row';
+    for (let i = 1; i <= 4; i++) {
+        const pz = document.getElementById(`pz-${i}`);
+        if (!pz) continue;
+        const wrapper = pz.querySelector('.card-table-wrapper');
+        if (!wrapper) continue;
+        const cardEl = wrapper.querySelector('.card-on-table');
+        const nameEl = wrapper.querySelector('.card-player-name');
+        if (!cardEl) continue;
+        const cv    = cardEl.querySelector('.cv')?.textContent || '';
+        const cs    = cardEl.querySelector('.cs')?.textContent || '';
+        const isRed = cardEl.classList.contains('red');
+        const mini  = document.createElement('div');
+        mini.className = `trick-mini-card${isRed ? ' red' : ''}`;
+        mini.title = nameEl?.textContent?.trim() || '';
+        mini.innerHTML = `<span class="mcv">${cv}</span><span class="mcs">${cs}</span>`;
+        row.appendChild(mini);
+    }
+    if (row.children.length > 0) histEl.appendChild(row);
+}
+
+function clearTricksHistory() {
+    const histEl = document.getElementById('tricks-history');
+    if (histEl) histEl.innerHTML = '';
 }
 
 function updateTurnUI(activeId) {
@@ -612,9 +639,9 @@ function updateTurnUI(activeId) {
 
 function closeWinnerModal() {
     document.getElementById('winner-modal').style.display = 'none';
-    // BUG-E fix : effacer le bouton "RETOUR AU SALON" avant la manche suivante
     const actEl = document.getElementById('special-actions');
     if (actEl) actEl.innerHTML = '';
+    clearTricksHistory();
     updateDealerUI();
     clearBoard();
 }

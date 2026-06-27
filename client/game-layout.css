@@ -204,13 +204,38 @@ body {
     text-align: center;
     letter-spacing: 0.02em;
 }
-/* Cartes du pli précédent : atténuées mais toujours lisibles */
-.card-table-wrapper.trick-played {
-    opacity: 0.35;
-    filter: grayscale(30%);
+/* ── Historique des plis (mini cartes dans le centre de la table) ── */
+.tricks-history {
+    position: absolute;
+    left: 15%;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 8;
     pointer-events: none;
-    transition: opacity 0.3s ease, filter 0.3s ease;
 }
+.trick-row {
+    display: flex;
+    gap: 3px;
+}
+.trick-mini-card {
+    width: 28px; height: 40px;
+    background: white;
+    border-radius: 3px;
+    border: 1px solid #444;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+    padding: 2px 2px;
+    font-weight: bold;
+    color: #000;
+    box-shadow: 1px 2px 6px rgba(0,0,0,0.55);
+    opacity: 0.88;
+}
+.trick-mini-card.red { color: var(--card-red); }
+.trick-mini-card .mcv { font-size: 0.6rem; line-height: 1; }
+.trick-mini-card .mcs { font-size: 0.72rem; line-height: 1; align-self: flex-end; transform: rotate(180deg); }
 
 /* ── Slots joueurs ───────────────────────────────── */
 .player-slot {
@@ -308,10 +333,21 @@ body {
 .pot-area       { z-index: 10; text-align: center; position: relative; }
 .pot-area h1    { color: var(--gold); margin: 0; font-size: 2.2rem; text-shadow: 0 0 15px black; }
 
-/* ── Boutons d'actions spéciales ─────────────────── */
+/* ── Barre d'actions fixe (toujours visible en bas) ──────────── */
 #special-actions {
-    position: absolute; bottom: -110px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 10px; z-index: 1000; flex-wrap: wrap; justify-content: center;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    display: flex;
+    gap: 8px;
+    z-index: 900;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    padding: 8px 16px max(10px, env(safe-area-inset-bottom));
+    pointer-events: none;       /* transparent quand vide */
+}
+#special-actions button {
+    pointer-events: auto;       /* seuls les boutons sont cliquables */
 }
 .btn-special {
     background: #e74c3c; color: white;
@@ -541,6 +577,15 @@ body {
     #announcement  { font-size: 2.2rem; }
     #timer-bar-bg  { width: 60px; }
     #timer-sec     { font-size: 0.75rem; }
+
+    /* Barre d'actions — boutons plus grands pour le tactile */
+    .btn-special   { padding: 12px 16px; font-size: 0.9rem; }
+
+    /* Historique plis réduit sur mobile */
+    .tricks-history { left: 10%; }
+    .trick-mini-card { width: 24px; height: 35px; }
+    .trick-mini-card .mcv { font-size: 0.55rem; }
+    .trick-mini-card .mcs { font-size: 0.65rem; }
 }
 
 /* Paysage mobile : header ultra-compact + overhangs réduits */
@@ -575,6 +620,16 @@ body {
     .pot-area h1 { font-size: 1.3rem; }
     .mini-hand   { height: 26px; }
     .card-back   { width: 16px; height: 23px; }
+
+    /* Historique plis encore plus compact en paysage */
+    .tricks-history { left: 8%; }
+    .trick-mini-card { width: 22px; height: 32px; opacity: 0.78; }
+    .trick-mini-card .mcv { font-size: 0.5rem; }
+    .trick-mini-card .mcs { font-size: 0.6rem; }
+
+    /* Barre actions fixe : padding réduit en paysage (place limitée en hauteur) */
+    #special-actions { padding-bottom: 6px; gap: 6px; }
+    .btn-special { padding: 8px 12px; font-size: 0.8rem; }
 
     .drawer-toggle-history { top: calc(44px + 6px); }
     .drawer-toggle-chat    { top: calc(44px + 6px); }
