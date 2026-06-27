@@ -1595,6 +1595,35 @@ io.on('connection', (socket) => {
         if (socket.userId) scheduleBroadcastSalonState();
     });
 
+    // ── Resynchronisation état complet (retour arrière-plan, bfcache, micro-coupure) ──
+    socket.on('request-game-state', () => {
+        for (const [tableId, table] of Object.entries(tables)) {
+            const pp = table.players.find(p => p.id === socket.id);
+            if (!pp) continue;
+            const activePl = table.players[table.turnIndex];
+            socket.emit('game-state-update', {
+                status:         table.status,
+                pot:            table.pot,
+                activePlayerId: activePl?.id,
+                activeUsername: activePl?.username,
+                cardsOnTable:   table.cardsOnTable,
+                dealerId:       table.players[table.dealerIndex]?.id,
+                players:        table.players.map(p => ({
+                    id: p.id, username: p.username, avatar: p.avatar,
+                    wallet: p.wallet, isInHand: p.isInHand, isPassing: p.isPassing,
+                    disconnected: p.disconnected || false
+                }))
+            });
+            if (pp.hand && pp.hand.length > 0 && table.status === 'PLAYING') {
+                socket.emit('receive-cards', {
+                    hand: pp.hand,
+                    turn: activePl?.id === socket.id
+                });
+            }
+            return;
+        }
+    });
+
     // Joueur quitte sa table (se lève ou arrête d'observer)
     socket.on('leave-table', async (data) => {
         if (!data?.salon_table_id) return;

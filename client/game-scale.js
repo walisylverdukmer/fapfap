@@ -31,8 +31,8 @@
         // Paysage mobile : header réduit + overhangs compressés
         var isMobLandscape = isMob && (vw > vh);
         var hdrEff = isMobLandscape ? Math.min(hdrH, 44) : hdrH;
-        var ovhT   = isMobLandscape ? 30  : SLOT_OVERHANG_T;   // slot haut presque invisible
-        var ovhB   = isMobLandscape ? 105 : SLOT_OVERHANG_V;   // main compressée en paysage
+        var ovhT   = isMobLandscape ? 18  : SLOT_OVERHANG_T;   // slot haut quasi-invisible
+        var ovhB   = isMobLandscape ? 82  : SLOT_OVERHANG_V;   // main compressée en paysage
 
         // Espace disponible
         var availW = vw;                            // sidebars en tiroir sur mobile
@@ -45,7 +45,7 @@
         var scaleX = availW / TABLE_W;
         var scaleY = availH / totalH;
         // Sur mobile (pas de sidebars), on peut dépasser légèrement 1
-        var maxScale = isMob ? 1.2 : 1.0;
+        var maxScale = isMob ? 1.4 : 1.0;
         var scale  = Math.min(scaleX, scaleY, maxScale);
 
         // Appliquer la transformation

@@ -392,10 +392,19 @@ function renderHand() {
         const isRed  = (card.suit === 'heart' || card.suit === 'diamond');
         cardEl.className = `card-img ${isRed ? 'red' : ''} ${(hasFolded || isPassing) ? 'folded' : ''}`;
         cardEl.innerHTML = `<span class="cv">${card.value}</span><span class="cs">${icons[card.suit]}</span>`;
+        // Appui long mobile → zoom sans jouer la carte
+        let _lpTimer = null;
+        cardEl.addEventListener('touchstart', () => {
+            _lpTimer = setTimeout(() => { _lpTimer = null; showCardZoom(card.value, card.suit, null); }, 500);
+        }, { passive: true });
+        const _cancelLp = () => { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } };
+        cardEl.addEventListener('touchend',  _cancelLp);
+        cardEl.addEventListener('touchmove', _cancelLp);
+
         cardEl.onclick = () => {
-            if(hasFolded || isPassing) return;
-            if(isMyTurn) playCard(index);
-            else showCardZoom(card.value, card.suit, null); // hors tour → affiche en grand
+            if (hasFolded || isPassing) return;
+            if (isMyTurn) playCard(index);
+            else showCardZoom(card.value, card.suit, null);
         };
         handDiv.appendChild(cardEl);
     });
@@ -430,6 +439,9 @@ socket.on('player-status-pass', (data) => {
 socket.on('display-card', (data) => {
     cardsPlayedInRound++;
 
+    // Début d'un nouveau pli : effacer les cartes atténuées du pli précédent
+    if (document.querySelectorAll('.trick-played').length > 0) clearBoard();
+
     // Retrait de la carte de MA main uniquement quand le serveur confirme
     if (data.playerId === socket.id) {
         myHand = myHand.filter(c => !(c.suit === data.card.suit && c.value === data.card.value));
@@ -454,8 +466,15 @@ socket.on('display-card', (data) => {
     playerNameEl.className = 'card-player-name';
     playerNameEl.textContent = data.username || '';
 
-    // Tap/clic → zoom plein écran
     const rawName = document.getElementById(slotNum === 1 ? 'my-name' : `n-${slotNum}`)?.innerText || data.username || '';
+    // Clic desktop + appui long mobile → zoom
+    let _wlpTimer = null;
+    const _cancelWlp = () => { if (_wlpTimer) { clearTimeout(_wlpTimer); _wlpTimer = null; } };
+    wrapper.addEventListener('touchstart', () => {
+        _wlpTimer = setTimeout(() => { _wlpTimer = null; showCardZoom(data.card.value, data.card.suit, rawName); }, 500);
+    }, { passive: true });
+    wrapper.addEventListener('touchend',  _cancelWlp);
+    wrapper.addEventListener('touchmove', _cancelWlp);
     wrapper.onclick = () => showCardZoom(data.card.value, data.card.suit, rawName);
 
     wrapper.appendChild(cardOnTable);
@@ -479,14 +498,12 @@ socket.on('player-folded', (data) => {
 });
 
 socket.on('clear-table', (data) => {
-    // BUG-02 + BUG-03 corrigés : reset du compteur et nettoyage visuel entre chaque pli
     cardsPlayedInRound = 0;
     isMyTurn = (socket.id === data.winnerId);
     updateTurnUI(data.winnerId);
     updateActionPanel();
-    setTimeout(() => {
-        clearBoard();
-    }, 800);
+    // Cartes du pli atténuées — elles restent visibles jusqu'au premier coup du pli suivant
+    document.querySelectorAll('.card-table-wrapper').forEach(el => el.classList.add('trick-played'));
 });
 
 socket.on('next-turn', (data) => {
@@ -514,6 +531,7 @@ socket.on('game-over', (data) => {
     isPassing = false;
     cardsPlayedInRound = 0;
     renderHand();
+    clearBoard();
     const actionsEl = document.getElementById('special-actions');
     actionsEl.innerHTML = '';
     if (salonTableId) {
@@ -836,6 +854,60 @@ socket.on('player-reconnected', (data) => {
     // player-list-update qui suit nettoie l'indicateur DC
 });
 
+// =====================================================
+// ARRIÈRE-PLAN & RESYNCHRONISATION
+// =====================================================
+
+// Retour au premier plan (bascule app, verrouillage écran, onglet caché) → resync
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) socket.emit('request-game-state');
+});
+window.addEventListener('pageshow', (e) => {
+    if (e.persisted) socket.emit('request-game-state'); // bfcache iOS Safari
+});
+window.addEventListener('focus', () => {
+    socket.emit('request-game-state');
+});
+
+socket.on('game-state-update', (data) => {
+    const potEl = document.getElementById('total-pot');
+    if (potEl && data.pot !== undefined) potEl.innerText = data.pot + ' ' + tableCurrency;
+
+    if (data.dealerId) { currentDealerId = data.dealerId; updateDealerUI(); }
+
+    if (data.status === 'PLAYING') {
+        clearBoard();
+        const _icons = { spade: '♠', heart: '♥', club: '♣', diamond: '♦' };
+        (data.cardsOnTable || []).forEach(entry => {
+            const sn = playerMap[entry.playerId];
+            if (!sn) return;
+            const zone = document.getElementById(`pz-${sn}`);
+            if (!zone) return;
+            const red2 = (entry.card.suit === 'heart' || entry.card.suit === 'diamond');
+            const w2 = document.createElement('div');
+            w2.className = 'card-table-wrapper';
+            const c2 = document.createElement('div');
+            c2.className = `card-on-table ${red2 ? 'red' : ''}`;
+            c2.innerHTML = `<span class="cv">${entry.card.value}</span><span class="cs">${_icons[entry.card.suit]}</span>`;
+            const n2 = document.createElement('div');
+            n2.className = 'card-player-name';
+            n2.textContent = entry.username || '';
+            w2.onclick = () => showCardZoom(entry.card.value, entry.card.suit, entry.username || '');
+            w2.appendChild(c2);
+            w2.appendChild(n2);
+            zone.appendChild(w2);
+        });
+
+        if (data.activePlayerId) {
+            isMyTurn = (data.activePlayerId === socket.id);
+            const sm = document.getElementById('status-msg');
+            if (sm) sm.innerText = isMyTurn ? 'À VOUS !' : `Tour de ${data.activeUsername}`;
+            updateTurnUI(data.activePlayerId);
+            updateActionPanel();
+        }
+    }
+});
+
 socket.on('reconnect-state', (data) => {
     document.getElementById('total-pot').innerText = data.pot + ' ' + tableCurrency;
     if (data.activePlayerId) {
@@ -861,6 +933,7 @@ socket.on('reconnect-state', (data) => {
         const nameEl2 = document.createElement('div');
         nameEl2.className = 'card-player-name';
         nameEl2.textContent = entry.username || '';
+        wrapper.onclick = () => showCardZoom(entry.card.value, entry.card.suit, entry.username || '');
         wrapper.appendChild(cardEl);
         wrapper.appendChild(nameEl2);
         targetZone.appendChild(wrapper);

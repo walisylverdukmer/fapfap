@@ -204,6 +204,13 @@ body {
     text-align: center;
     letter-spacing: 0.02em;
 }
+/* Cartes du pli précédent : atténuées mais toujours lisibles */
+.card-table-wrapper.trick-played {
+    opacity: 0.35;
+    filter: grayscale(30%);
+    pointer-events: none;
+    transition: opacity 0.3s ease, filter 0.3s ease;
+}
 
 /* ── Slots joueurs ───────────────────────────────── */
 .player-slot {
@@ -523,13 +530,13 @@ body {
     .winner-avatar-big { width: 100px; height: 100px; }
 
     .pot-area h1   { font-size: 1.6rem; }
-    .card-img      { width: 60px; height: 88px; font-size: 1.15rem; margin-left: -18px; }
-    .card-img .cv  { font-size: 1.15rem; }
-    .card-img .cs  { font-size: 1.35rem; }
-    .hand          { height: 96px; }
-    .card-on-table { width: 46px; height: 68px; font-size: 0.92rem; }
-    .card-on-table .cv { font-size: 0.92rem; }
-    .card-on-table .cs { font-size: 1.1rem; }
+    .card-img      { width: 64px; height: 94px; font-size: 1.2rem; margin-left: -18px; }
+    .card-img .cv  { font-size: 1.2rem; }
+    .card-img .cs  { font-size: 1.4rem; }
+    .hand          { height: 102px; }
+    .card-on-table { width: 52px; height: 76px; font-size: 1rem; }
+    .card-on-table .cv { font-size: 1rem; }
+    .card-on-table .cs { font-size: 1.2rem; }
 
     #announcement  { font-size: 2.2rem; }
     #timer-bar-bg  { width: 60px; }
@@ -554,14 +561,15 @@ body {
     .avatar   { width: 50px; height: 50px; }
     .name-tag { font-size: 0.68rem; padding: 2px 7px; margin-top: 4px; min-width: 60px; }
 
-    /* Cartes en main un peu plus grandes pour visibilité */
-    .card-img     { width: 56px; height: 82px; font-size: 1.05rem; margin-left: -16px; }
-    .card-img .cv { font-size: 1.05rem; }
-    .card-img .cs { font-size: 1.25rem; }
-    /* Cartes sur table */
-    .card-on-table { width: 42px; height: 62px; font-size: 0.85rem; }
-    .card-on-table .cv { font-size: 0.85rem; }
-    .card-on-table .cs { font-size: 1rem; }
+    /* Cartes en main optimisées paysage */
+    .card-img     { width: 62px; height: 90px; font-size: 1.15rem; margin-left: -16px; }
+    .card-img .cv { font-size: 1.15rem; }
+    .card-img .cs { font-size: 1.35rem; }
+    .hand         { height: 98px; margin-bottom: 2px; }
+    /* Cartes sur table — plus grandes pour meilleure lecture */
+    .card-on-table { width: 50px; height: 72px; font-size: 0.98rem; }
+    .card-on-table .cv { font-size: 0.98rem; }
+    .card-on-table .cs { font-size: 1.15rem; }
 
     /* Pot et mini-main compacts */
     .pot-area h1 { font-size: 1.3rem; }
